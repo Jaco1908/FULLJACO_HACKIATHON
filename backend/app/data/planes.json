@@ -1,0 +1,10 @@
+[
+  {
+    "plan": "Premium",
+    "cobertura": 90
+  },
+  {
+    "plan": "Basico",
+    "cobertura": 70
+  }
+]

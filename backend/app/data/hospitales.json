@@ -1,0 +1,12 @@
+[
+  {
+    "nombre": "Hospital Metropolitano",
+    "especialidad": "Medicina General",
+    "precio": 50
+  },
+  {
+    "nombre": "Hospital Salud Plus",
+    "especialidad": "Cardiologia",
+    "precio": 80
+  }
+]
