@@ -4,7 +4,9 @@ from typing import Literal, Optional
 
 class AnalizarRequest(BaseModel):
     texto: str = Field(..., min_length=3, max_length=2000)
-    historial: list[str] = Field(default=[])
+
+    historial: Optional[list[str]] = Field(default_factory=list)
+
 
 
 class HospitalDTO(BaseModel):
