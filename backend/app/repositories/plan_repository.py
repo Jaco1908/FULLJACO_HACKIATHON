@@ -72,3 +72,19 @@ class PlanRepository:
         )
 
         return response.data or []
+
+    def get_coberturas_bulk(self, plan_ids: list[str]) -> dict[str, list[dict]]:
+        """Una sola query para todos los planes — evita N+1."""
+        if not plan_ids:
+            return {}
+        response = (
+            self.db
+            .table("coberturas_especialidad")
+            .select("*")
+            .in_("plan_id", plan_ids)
+            .execute()
+        )
+        result: dict[str, list] = {pid: [] for pid in plan_ids}
+        for c in (response.data or []):
+            result.setdefault(c["plan_id"], []).append(c)
+        return result

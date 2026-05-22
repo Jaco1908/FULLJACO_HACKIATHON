@@ -6,58 +6,48 @@ class HospitalRepository:
     def __init__(self):
         self.db = get_supabase()
 
-    def get_all(self):
+    def get_all(self) -> list[dict]:
+        return self.db.table("hospitales").select("*").order("ciudad,nombre").execute().data or []
 
-        response = self.db.table("hospitales").select("*").execute()
+    def get_by_id(self, hospital_id: str) -> dict | None:
+        return self.db.table("hospitales").select("*").eq("id", hospital_id).single().execute().data
 
-        return response.data or []
-
-    def get_by_especialidad(self, especialidad):
-
-        response = self.db.table("hospitales").select("*").execute()
-
-        hospitales = response.data or []
-
-        encontrados = []
-
-        for hospital in hospitales:
-
-            lista_especialidades = hospital.get("especialidades")
-
-            if not lista_especialidades:
-                continue
-
-            for esp in lista_especialidades:
-
-                if esp.lower() == especialidad.lower():
-                    encontrados.append(hospital)
-                    break
-
-        return encontrados
-
-    def get_precios_por_especialidad(self):
-
+    def get_by_especialidad(self, especialidad: str) -> list[dict]:
         response = (
             self.db.table("precios_especialidad")
-            .select("especialidad,precio")
+            .select("precio, hospital:hospital_id(id, nombre, ciudad)")
+            .eq("especialidad", especialidad)
+            .order("precio")
             .execute()
         )
+        result = []
+        for row in (response.data or []):
+            h = row.get("hospital")
+            if h:
+                result.append({
+                    "id": h["id"],
+                    "nombre": h["nombre"],
+                    "ciudad": h["ciudad"],
+                    "precio": float(row["precio"]),
+                })
+        return result
 
-        datos = response.data or []
+    def get_precios_por_especialidad(self) -> dict[str, float]:
+        response = self.db.table("precios_especialidad").select("especialidad,precio").execute()
+        acum: dict[str, list[float]] = {}
+        for row in (response.data or []):
+            acum.setdefault(row["especialidad"], []).append(float(row["precio"]))
+        return {esp: round(sum(vals) / len(vals)) for esp, vals in acum.items()}
 
-        precios = {}
+    def create(self, data: dict) -> dict:
+        return self.db.table("hospitales").insert(data).execute().data[0]
 
-        for row in datos:
+    def update(self, hospital_id: str, data: dict) -> dict:
+        return self.db.table("hospitales").update(data).eq("id", hospital_id).execute().data[0]
 
-            esp = row["especialidad"]
-            precio = row["precio"]
-
-            if esp not in precios:
-                precios[esp] = []
-
-            precios[esp].append(precio)
-
-        return {
-            esp: round(sum(vals) / len(vals))
-            for esp, vals in precios.items()
-        }
+    def delete(self, hospital_id: str) -> None:
+        try:
+            self.db.table("precios_especialidad").delete().eq("hospital_id", hospital_id).execute()
+            self.db.table("hospitales").delete().eq("id", hospital_id).execute()
+        except Exception as e:
+            raise RuntimeError(f"Error en cascade delete de hospital {hospital_id}: {e}") from e
