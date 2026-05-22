@@ -15,6 +15,7 @@ export default function Registro() {
   const [form, setForm] = useState({ nombre: '', email: '', password: '', confirmPassword: '', aseguradoraId: '', aseguradoraNombre: '', planId: '', planNombre: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirmacionEnviada, setConfirmacionEnviada] = useState(false)
 
   useEffect(() => {
     getAseguradoras()
@@ -48,15 +49,53 @@ export default function Registro() {
       navigate('/chat')
     } catch (err) {
       const msg = err.message || ''
-      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+
+      if (msg === 'EMAIL_CONFIRMATION_REQUIRED') {
+        // Supabase envió un correo de confirmación — mostrar pantalla informativa
+        setConfirmacionEnviada(true)
+      } else if (
+        msg.toLowerCase().includes('already registered') ||
+        msg.toLowerCase().includes('already been registered') ||
+        msg.toLowerCase().includes('user already registered')
+      ) {
         setError('Este correo ya tiene una cuenta. Ve a Iniciar sesión.')
+        setStep(1)
       } else {
         setError(msg || 'Error al crear la cuenta')
+        setStep(1)
       }
-      setStep(1)
     } finally {
       setLoading(false)
     }
+  }
+
+  // Pantalla de confirmación de email (Supabase requiere verificar el correo antes de iniciar sesión)
+  if (confirmacionEnviada) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card" style={{ textAlign: 'center', padding: '2.5rem 2rem' }}>
+          <div className="auth-logo">
+            <Activity size={34} color="#2563eb" />
+            <h1>SaludIA</h1>
+          </div>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📧</div>
+          <h2 style={{ marginBottom: '0.5rem' }}>¡Revisa tu correo!</h2>
+          <p style={{ color: 'var(--text2)', marginBottom: '0.25rem' }}>
+            Te enviamos un enlace de confirmación a:
+          </p>
+          <p style={{ color: 'var(--accent)', fontWeight: 700, marginBottom: '1.25rem' }}>
+            {form.email}
+          </p>
+          <p style={{ color: 'var(--text2)', fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+            Haz clic en el enlace del correo para activar tu cuenta y luego inicia sesión.
+            Si no lo ves, revisa tu carpeta de spam.
+          </p>
+          <Link to="/login" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+            Ir a Iniciar sesión →
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

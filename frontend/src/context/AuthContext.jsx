@@ -53,26 +53,77 @@ export function AuthProvider({ children }) {
   }
 
   async function registrar(nombre, email, password, planSeguroId) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { nombre_completo: nombre } },
+    // Timeout de 30 segundos (proyecto free puede tardar al despertar)
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('Sin respuesta del servidor. ¿El proyecto de Supabase está activo?')),
+        30000
+      )
     })
+
+    let data, error
+    try {
+      const result = await Promise.race([
+        supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { nombre_completo: nombre } },
+        }),
+        timeoutPromise,
+      ])
+      data = result.data
+      error = result.error
+    } finally {
+      clearTimeout(timeoutId)
+    }
     if (error) throw error
 
-    // Si tiene plan, actualizar vía backend (no Supabase directo)
+    // Supabase puede requerir confirmación de email.
+    // Si data.session es null, el usuario necesita confirmar su correo antes de poder iniciar sesión.
+    if (!data.session) {
+      // Lanzamos un error especial que Registro.jsx captura para mostrar la pantalla correcta.
+      const err = new Error('EMAIL_CONFIRMATION_REQUIRED')
+      err.email = email
+      throw err
+    }
+
+    // Sesión activa → ya podemos actualizar el perfil si eligió un plan
     if (data.user && planSeguroId) {
-      // Esperar a que el trigger de Supabase cree el perfil
-      await new Promise(r => setTimeout(r, 500))
-      await actualizarPerfil({ plan_seguro_id: planSeguroId })
+      // Esperar a que el trigger de Supabase cree el perfil en tabla "perfiles"
+      await new Promise(r => setTimeout(r, 600))
+      try {
+        await actualizarPerfil({ plan_seguro_id: planSeguroId })
+      } catch (profileErr) {
+        // No es crítico: el usuario puede elegir su plan después desde Perfil
+        console.warn('[AuthContext] No se pudo guardar el plan inicial:', profileErr)
+      }
     }
     return data
   }
 
   async function iniciarSesion(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-    return data
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('Sin respuesta del servidor. ¿El proyecto de Supabase está activo?')),
+        30000
+      )
+    })
+
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        timeoutPromise,
+      ])
+      // Si llegamos aquí, ganó signInWithPassword (no el timeout)
+      const { data, error } = result
+      if (error) throw error
+      return data
+    } finally {
+      // Siempre limpiar el timeout para no dejar timers colgados
+      clearTimeout(timeoutId)
+    }
   }
 
   async function cerrarSesion() {

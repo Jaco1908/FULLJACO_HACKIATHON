@@ -20,8 +20,17 @@ export default function Login() {
     try {
       await iniciarSesion(form.email, form.password)
       navigate('/chat')
-    } catch {
-      setError('Correo o contraseña incorrectos')
+    } catch (err) {
+      const msg = err?.message?.toLowerCase() || ''
+      if (msg.includes('email not confirmed')) {
+        setError('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.')
+      } else if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+        setError('Correo o contraseña incorrectos')
+      } else if (msg.includes('sin respuesta') || msg.includes('servidor')) {
+        setError(err.message)
+      } else {
+        setError('Error al iniciar sesión. Intenta de nuevo.')
+      }
     } finally {
       setLoading(false)
     }
