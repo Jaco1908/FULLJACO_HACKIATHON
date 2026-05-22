@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes.analizar import router
+
+from app.controllers.analizar_controller import router
 
 app = FastAPI()
 
@@ -13,7 +14,3 @@ app.add_middleware(
 )
 
 app.include_router(router)
-
-@app.get("/")
-def root():
-    return {"message": "SaludIA Backend Running"}

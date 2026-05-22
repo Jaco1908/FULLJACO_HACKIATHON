@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.models.request_models import AnalizarRequest
-from app.services.ia_service import analizar_sintomas, hospitales
+from app.services.ia_service import analizar_sintomas
 
 router = APIRouter()
 
