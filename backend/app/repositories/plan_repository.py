@@ -88,3 +88,56 @@ class PlanRepository:
         for c in (response.data or []):
             result.setdefault(c["plan_id"], []).append(c)
         return result
+
+    # ── Planes: mutaciones ────────────────────────────────────────────────────
+
+    def create_plan(self, data: dict) -> dict:
+        response = (
+            self.db.table("planes_seguro")
+            .insert(data)
+            .execute()
+        )
+        return response.data[0]
+
+    def update_plan(self, plan_id: str, data: dict) -> dict | None:
+        response = (
+            self.db.table("planes_seguro")
+            .update(data)
+            .eq("id", plan_id)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def delete_plan(self, plan_id: str) -> bool:
+        """Elimina coberturas del plan y luego el plan. Devuelve True si existía."""
+        self.db.table("coberturas_especialidad").delete().eq("plan_id", plan_id).execute()
+        result = self.db.table("planes_seguro").delete().eq("id", plan_id).execute()
+        return bool(result.data)
+
+    # ── Coberturas: mutaciones ────────────────────────────────────────────────
+
+    def create_cobertura(self, data: dict) -> dict:
+        response = (
+            self.db.table("coberturas_especialidad")
+            .insert(data)
+            .execute()
+        )
+        return response.data[0]
+
+    def update_cobertura(self, cobertura_id: str, data: dict) -> dict | None:
+        response = (
+            self.db.table("coberturas_especialidad")
+            .update(data)
+            .eq("id", cobertura_id)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def delete_cobertura(self, cobertura_id: str) -> bool:
+        result = (
+            self.db.table("coberturas_especialidad")
+            .delete()
+            .eq("id", cobertura_id)
+            .execute()
+        )
+        return bool(result.data)

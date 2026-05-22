@@ -10,11 +10,9 @@ class SaludIAException(Exception):
         super().__init__(message)
 
 
-class IAServiceError(Exception):
+class IAServiceError(SaludIAException):
     def __init__(self, message: str, status_code: int = 500):
-        self.message = message
-        self.status_code = status_code
-        super().__init__(message)
+        super().__init__(message, status_code)
 
 class RecursoNoEncontrado(SaludIAException):
     def __init__(self, recurso: str, id: str):

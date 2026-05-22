@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from groq import Groq
 
@@ -6,6 +7,8 @@ from app.config import get_settings
 from app.services.copago_service import calcular_copago
 from app.repositories.hospital_repository import HospitalRepository
 from app.exceptions import IAServiceError
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 client = Groq(api_key=settings.groq_api_key)
@@ -270,8 +273,7 @@ async def analizar_sintomas(
 
         raw = response.choices[0].message.content.strip()
 
-        print("RESPUESTA IA:")
-        print(raw)
+        logger.debug("Respuesta IA: %s", raw)
 
         if "```" in raw:
 
@@ -290,7 +292,7 @@ async def analizar_sintomas(
         try:
             data = json.loads(raw)
 
-        except:
+        except json.JSONDecodeError:
             # si no viene JSON, tomarlo como pregunta
             return {
                 "tipo": "pregunta",

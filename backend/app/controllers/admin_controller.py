@@ -9,7 +9,6 @@ from app.dtos.admin_dto import (
 from app.repositories.aseguradora_repository import AseguradoraRepository
 from app.repositories.plan_repository import PlanRepository
 from app.repositories.hospital_repository import HospitalRepository
-from app.repositories.supabase_client import get_supabase
 from app.dependencies import require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -63,7 +62,7 @@ def listar_planes(admin_id: str = Depends(require_admin)):
 
 @router.post("/planes", status_code=status.HTTP_201_CREATED)
 def crear_plan(data: PlanCreate, admin_id: str = Depends(require_admin)):
-    return get_supabase().table("planes_seguro").insert(data.model_dump()).execute().data[0]
+    return _plan_repo.create_plan(data.model_dump())
 
 
 @router.put("/planes/{plan_id}")
@@ -71,17 +70,16 @@ def actualizar_plan(plan_id: str, data: PlanUpdate, admin_id: str = Depends(requ
     update_data = data.model_dump(exclude_none=True)
     if not update_data:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Sin datos para actualizar")
-    result = get_supabase().table("planes_seguro").update(update_data).eq("id", plan_id).execute()
-    if not result.data:
+    result = _plan_repo.update_plan(plan_id, update_data)
+    if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan no encontrado")
-    return result.data[0]
+    return result
 
 
 @router.delete("/planes/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_plan(plan_id: str, admin_id: str = Depends(require_admin)):
-    get_supabase().table("coberturas_especialidad").delete().eq("plan_id", plan_id).execute()
-    result = get_supabase().table("planes_seguro").delete().eq("id", plan_id).execute()
-    if not result.data:
+    found = _plan_repo.delete_plan(plan_id)
+    if not found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan no encontrado")
 
 
@@ -94,7 +92,7 @@ def listar_coberturas(plan_id: str, admin_id: str = Depends(require_admin)):
 
 @router.post("/coberturas", status_code=status.HTTP_201_CREATED)
 def crear_cobertura(data: CoberturaCreate, admin_id: str = Depends(require_admin)):
-    return get_supabase().table("coberturas_especialidad").insert(data.model_dump()).execute().data[0]
+    return _plan_repo.create_cobertura(data.model_dump())
 
 
 @router.put("/coberturas/{cobertura_id}")
@@ -106,16 +104,16 @@ def actualizar_cobertura(
     update_data = data.model_dump(exclude_none=True)
     if not update_data:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Sin datos para actualizar")
-    result = get_supabase().table("coberturas_especialidad").update(update_data).eq("id", cobertura_id).execute()
-    if not result.data:
+    result = _plan_repo.update_cobertura(cobertura_id, update_data)
+    if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cobertura no encontrada")
-    return result.data[0]
+    return result
 
 
 @router.delete("/coberturas/{cobertura_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_cobertura(cobertura_id: str, admin_id: str = Depends(require_admin)):
-    result = get_supabase().table("coberturas_especialidad").delete().eq("id", cobertura_id).execute()
-    if not result.data:
+    found = _plan_repo.delete_cobertura(cobertura_id)
+    if not found:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cobertura no encontrada")
 
 
