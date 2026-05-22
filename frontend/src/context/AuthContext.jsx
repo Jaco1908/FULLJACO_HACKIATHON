@@ -10,10 +10,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // getUser() valida el token con el servidor — más seguro que getSession()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user ?? null)
-      if (user) {
+    // Usamos getSession() en lugar de getUser() para la carga inicial:
+    // getSession() lee desde localStorage (instantáneo, sin red) → evita que
+    // la pantalla "Cargando..." se quede colgada si Supabase tarda en responder.
+    // La validación real ocurre en cada llamada al backend (JWT verificado por el servidor).
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+      if (currentUser) {
         cargarPerfil()
       } else {
         setLoading(false)
@@ -21,9 +25,13 @@ export function AuthProvider({ children }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'SIGNED_IN') {
+        // Solo en login nuevo (no en refresco de token) para evitar cargas duplicadas
         setUser(session?.user ?? null)
         await cargarPerfil()
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Actualizar el user sin recargar el perfil completo
+        setUser(session?.user ?? null)
       } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
         setUser(null)
         setPerfil(null)

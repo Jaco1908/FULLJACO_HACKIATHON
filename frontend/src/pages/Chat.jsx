@@ -159,8 +159,10 @@ export default function Chat() {
     } catch (error) {
       console.error('[Chat] Error en análisis:', error)
       const mensaje = error.status === 401
-        ? 'Tu sesión expiró. Por favor recarga la página.'
-        : 'Error al conectar con el servicio. Verifica tu conexión.'
+        ? 'Tu sesión expiró. Por favor cierra sesión e inicia sesión de nuevo.'
+        : error.status === 429
+        ? 'Demasiadas consultas. Espera un momento antes de continuar.'
+        : 'Error al conectar con el servicio. Verifica que el backend esté corriendo.'
       setMensajes(prev => [...prev, {
         id: crypto.randomUUID(), role: 'assistant', content: mensaje, ts: new Date(),
       }])
