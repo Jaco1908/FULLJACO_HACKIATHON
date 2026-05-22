@@ -2,11 +2,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Activity, MessageCircle, Clock, LogOut, User, Settings, TrendingDown, ShieldCheck, Lightbulb } from 'lucide-react'
 
-const ADMIN_EMAILS = ['bryanfamiliat@gmail.com']
-
 export default function Navbar() {
   const { user, perfil, cerrarSesion } = useAuth()
-  const esAdmin = user && ADMIN_EMAILS.includes(user.email)
+  // Rol admin viene del backend (campo es_admin en perfiles) — nunca hardcodeado
+  const esAdmin = !!perfil?.es_admin
   const navigate = useNavigate()
   const location = useLocation()
 

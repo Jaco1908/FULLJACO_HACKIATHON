@@ -1,64 +1,48 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { compararPlanes } from '../api/planes.api'
+import { ESPECIALIDADES } from '../constants/especialidades'
 import { TrendingDown, ShieldCheck, Search, Star } from 'lucide-react'
-
-const ESPECIALIDADES = [
-  'Medicina General','Neurología','Cardiología','Gastroenterología','Traumatología',
-  'Pediatría','Ginecología','Dermatología','Oncología','Oftalmología','Urología',
-  'Psiquiatría','Endocrinología','Reumatología','Otorrinolaringología','Neumología','Nefrología'
-]
-
-const PRECIO_FALLBACK = {
-  'Medicina General': 40, 'Neurología': 110, 'Cardiología': 120, 'Gastroenterología': 100,
-  'Traumatología': 90, 'Pediatría': 60, 'Ginecología': 80, 'Dermatología': 70,
-  'Oncología': 150, 'Oftalmología': 85, 'Urología': 92, 'Psiquiatría': 105,
-  'Endocrinología': 100, 'Reumatología': 97, 'Otorrinolaringología': 82, 'Neumología': 95, 'Nefrología': 125
-}
-
-const BACKEND = import.meta.env.VITE_BACKEND_URL
 
 export default function Comparador() {
   const { perfil } = useAuth()
   const [especialidad, setEspecialidad] = useState('Medicina General')
-  const [planes, setPlanes] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [preciosReales, setPreciosReales] = useState({})
+  const [resultado, setResultado]       = useState(null)  // { especialidad, precio_referencia, planes }
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState(null)
 
-  const miPlanId = perfil?.plan_seguro_id
+  const miPlanId = perfil?.plan_seguro?.id || perfil?.plan_seguro_id
 
   useEffect(() => {
-    fetch(`${BACKEND}/precios`)
-      .then(r => r.json())
-      .then(data => setPreciosReales(data))
-      .catch(() => {}) // usa fallback si backend no responde
-  }, [])
-
-  useEffect(() => { buscar() }, [especialidad])
+    buscar()
+  }, [especialidad])  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function buscar() {
     setLoading(true)
-    const { data } = await supabase
-      .from('coberturas_especialidad')
-      .select('*, plan:plan_id(*, aseguradora:aseguradora_id(nombre))')
-      .eq('especialidad', especialidad)
-      .eq('cubierta', true)
-      .order('porcentaje_cobertura', { ascending: false })
-    setPlanes(data || [])
-    setLoading(false)
+    setError(null)
+    try {
+      const data = await compararPlanes(especialidad)
+      setResultado(data)
+    } catch (err) {
+      console.error('[Comparador] Error al comparar planes:', err)
+      setError('No se pudo cargar la comparación. Intenta de nuevo.')
+    } finally {
+      setLoading(false)
+    }
   }
-
-  const precio = preciosReales[especialidad] || PRECIO_FALLBACK[especialidad] || 80
 
   return (
     <div className="comparador-container">
       <h2><TrendingDown size={22} /> Comparador de planes</h2>
-      <p className="comparador-sub">Selecciona una especialidad y compara cuánto pagarías con cada plan de seguro</p>
+      <p className="comparador-sub">
+        Selecciona una especialidad y compara cuánto pagarías con cada plan de seguro
+      </p>
 
       {miPlanId && (
         <div className="comparador-mi-plan-info">
           <Star size={14} color="#f59e0b" fill="#f59e0b"/>
-          Tu plan actual: <strong>{perfil?.plan_seguro?.nombre}</strong> — {perfil?.plan_seguro?.aseguradora?.nombre}
+          Tu plan actual: <strong>{perfil?.plan_seguro?.nombre}</strong>
+          {perfil?.plan_seguro?.aseguradora?.nombre && ` — ${perfil.plan_seguro.aseguradora.nombre}`}
         </div>
       )}
 
@@ -67,8 +51,14 @@ export default function Comparador() {
         <select value={especialidad} onChange={e => setEspecialidad(e.target.value)}>
           {ESPECIALIDADES.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
-        <span className="precio-referencia">Precio de referencia: <strong>${precio}</strong></span>
+        {resultado && (
+          <span className="precio-referencia">
+            Precio de referencia: <strong>${resultado.precio_referencia}</strong>
+          </span>
+        )}
       </div>
+
+      {error && <div className="error-msg">{error}</div>}
 
       {loading ? (
         <div className="page-loading">Cargando planes...</div>
@@ -86,31 +76,36 @@ export default function Comparador() {
               </tr>
             </thead>
             <tbody>
-              {planes.map((c, i) => {
-                const copago = precio - (precio * c.porcentaje_cobertura / 100)
-                const esMejor = i === 0
+              {(resultado?.planes || []).map((c, i) => {
+                const esMejor  = i === 0
                 const esMiPlan = c.plan_id === miPlanId
                 return (
-                  <tr key={c.id} className={`${esMejor ? 'fila-mejor' : ''} ${esMiPlan ? 'fila-mi-plan' : ''}`}>
+                  <tr
+                    key={c.plan_id}
+                    className={`${esMejor ? 'fila-mejor' : ''} ${esMiPlan ? 'fila-mi-plan' : ''}`}
+                  >
+                    <td><span className="aseg-nombre">{c.aseguradora_nombre}</span></td>
                     <td>
-                      <span className="aseg-nombre">{c.plan?.aseguradora?.nombre}</span>
-                    </td>
-                    <td>
-                      <span style={{display:'flex', alignItems:'center', gap:'0.4rem'}}>
-                        {c.plan?.nombre}
-                        {esMiPlan && <span className="badge-mi-plan"><Star size={10} fill="currentColor"/> Mi plan</span>}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {c.plan_nombre}
+                        {esMiPlan && (
+                          <span className="badge-mi-plan">
+                            <Star size={10} fill="currentColor"/> Mi plan
+                          </span>
+                        )}
                       </span>
                     </td>
-                    <td>${c.plan?.prima_mensual}/mes</td>
+                    <td>${c.prima_mensual}/mes</td>
                     <td>
                       <div className="cobertura-bar-wrap">
-                        <div className="cobertura-bar" style={{width: `${c.porcentaje_cobertura}%`}} />
+                        <div className="cobertura-bar" style={{ width: `${c.porcentaje_cobertura}%` }} />
                         <span>{c.porcentaje_cobertura}%</span>
                       </div>
                     </td>
                     <td>
+                      {/* copago_estimado lo calcula el backend — no hay fórmula en el frontend */}
                       <span className={`copago-valor ${esMejor ? 'copago-mejor' : ''}`}>
-                        ${copago.toFixed(2)}
+                        ${Number(c.copago_estimado).toFixed(2)}
                       </span>
                       {esMejor && <span className="badge-mejor">Mejor precio</span>}
                     </td>
@@ -118,8 +113,12 @@ export default function Comparador() {
                   </tr>
                 )
               })}
-              {planes.length === 0 && (
-                <tr><td colSpan={6} style={{textAlign:'center', color:'var(--text-dim)', padding:'2rem'}}>No hay planes con cobertura para esta especialidad</td></tr>
+              {(resultado?.planes || []).length === 0 && !loading && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '2rem' }}>
+                    No hay planes con cobertura para esta especialidad
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -127,7 +126,8 @@ export default function Comparador() {
       )}
 
       <div className="comparador-nota">
-        <ShieldCheck size={14} /> Los copagos son estimados basados en el precio de referencia. El valor exacto puede variar según el hospital y condiciones del contrato.
+        <ShieldCheck size={14} /> Los copagos son estimados basados en el precio de referencia.
+        El valor exacto puede variar según el hospital y condiciones del contrato.
       </div>
     </div>
   )

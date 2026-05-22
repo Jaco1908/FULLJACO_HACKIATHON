@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { getAseguradoras, getPlanes } from '../api/planes.api'
 import { Activity, ArrowLeft, ArrowRight, Check, ShieldCheck, User, Mail, Lock } from 'lucide-react'
 
 const TOTAL_STEPS = 4
@@ -17,14 +17,16 @@ export default function Registro() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    supabase.from('aseguradoras').select('*').eq('activa', true).order('nombre')
-      .then(({ data }) => setAseguradoras(data || []))
+    getAseguradoras()
+      .then(data => setAseguradoras(data || []))
+      .catch(err => console.error('[Registro] Error al cargar aseguradoras:', err))
   }, [])
 
   useEffect(() => {
     if (!form.aseguradoraId) { setPlanes([]); return }
-    supabase.from('planes_seguro').select('*').eq('aseguradora_id', form.aseguradoraId).eq('activo', true).order('prima_mensual')
-      .then(({ data }) => setPlanes(data || []))
+    getPlanes(form.aseguradoraId)
+      .then(data => setPlanes(data || []))
+      .catch(err => console.error('[Registro] Error al cargar planes:', err))
   }, [form.aseguradoraId])
 
   function next() { setError(''); setStep(s => s + 1) }

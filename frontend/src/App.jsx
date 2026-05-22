@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import SplashScreen from './components/SplashScreen'
@@ -37,34 +38,36 @@ export default function App() {
   if (splash) return <SplashScreen onDone={hideSplash} />
 
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/registro" element={<Registro />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/chat" element={
-            <ProtectedRoute><Layout><Chat /></Layout></ProtectedRoute>
-          } />
-          <Route path="/historial" element={
-            <ProtectedRoute><Layout><Historial /></Layout></ProtectedRoute>
-          } />
-          <Route path="/perfil" element={
-            <ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>
-          } />
-          <Route path="/comparador" element={
-            <ProtectedRoute><Layout><Comparador /></Layout></ProtectedRoute>
-          } />
-          <Route path="/insights" element={
-            <ProtectedRoute><Layout><Insights /></Layout></ProtectedRoute>
-          } />
-          <Route path="/admin" element={
-            <AdminRoute><Layout><Admin /></Layout></AdminRoute>
-          } />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/registro" element={<Registro />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/chat" element={
+              <ProtectedRoute><Layout><Chat /></Layout></ProtectedRoute>
+            } />
+            <Route path="/historial" element={
+              <ProtectedRoute><Layout><Historial /></Layout></ProtectedRoute>
+            } />
+            <Route path="/perfil" element={
+              <ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>
+            } />
+            <Route path="/comparador" element={
+              <ProtectedRoute><Layout><Comparador /></Layout></ProtectedRoute>
+            } />
+            <Route path="/insights" element={
+              <ProtectedRoute><Layout><Insights /></Layout></ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <AdminRoute><Layout><Admin /></Layout></AdminRoute>
+            } />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

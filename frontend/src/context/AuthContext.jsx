@@ -1,65 +1,70 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { getPerfil, actualizarPerfil } from '../api/perfil.api'
 
 const AuthContext = createContext({})
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [perfil, setPerfil] = useState(null)
+  const [user, setUser]       = useState(null)
+  const [perfil, setPerfil]   = useState(null)   // viene del backend, no de Supabase directamente
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) cargarPerfil(session.user.id)
-      else setLoading(false)
+    // getUser() valida el token con el servidor — más seguro que getSession()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user ?? null)
+      if (user) {
+        cargarPerfil()
+      } else {
+        setLoading(false)
+      }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setUser(session?.user ?? null)
-        if (session?.user) cargarPerfil(session.user.id)
+        await cargarPerfil()
       } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-        setUser(null); setPerfil(null); setLoading(false)
-      } else {
-        setUser(session?.user ?? null)
-        if (session?.user) cargarPerfil(session.user.id)
-        else { setPerfil(null); setLoading(false) }
+        setUser(null)
+        setPerfil(null)
+        setLoading(false)
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  async function cargarPerfil(userId) {
-    const { data } = await supabase
-      .from('perfiles')
-      .select(`
-        *,
-        planes(*),
-        plan_seguro:plan_seguro_id(
-          *,
-          aseguradora:aseguradora_id(*),
-          coberturas:coberturas_especialidad(*)
-        )
-      `)
-      .eq('id', userId)
-      .single()
-    setPerfil(data)
-    setLoading(false)
+  /** Carga el perfil desde el BACKEND (incluye plan, aseguradora, coberturas, es_admin). */
+  async function cargarPerfil() {
+    try {
+      const data = await getPerfil()
+      setPerfil(data)
+    } catch (error) {
+      console.error('[AuthContext] Error al cargar perfil:', error)
+      setPerfil(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /** Llama al backend para actualizar perfil y recarga el contexto. */
+  async function recargarPerfil() {
+    await cargarPerfil()
   }
 
   async function registrar(nombre, email, password, planSeguroId) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { nombre_completo: nombre } }
+      options: { data: { nombre_completo: nombre } },
     })
     if (error) throw error
+
+    // Si tiene plan, actualizar vía backend (no Supabase directo)
     if (data.user && planSeguroId) {
-      await supabase.from('perfiles')
-        .update({ plan_seguro_id: planSeguroId })
-        .eq('id', data.user.id)
+      // Esperar a que el trigger de Supabase cree el perfil
+      await new Promise(r => setTimeout(r, 500))
+      await actualizarPerfil({ plan_seguro_id: planSeguroId })
     }
     return data
   }
@@ -77,7 +82,10 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, perfil, loading, registrar, iniciarSesion, cerrarSesion }}>
+    <AuthContext.Provider value={{
+      user, perfil, loading,
+      registrar, iniciarSesion, cerrarSesion, recargarPerfil,
+    }}>
       {children}
     </AuthContext.Provider>
   )
