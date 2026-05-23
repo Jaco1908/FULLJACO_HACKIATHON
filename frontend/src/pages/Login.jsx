@@ -30,6 +30,10 @@ export default function Login() {
         setError('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.')
       } else if (msgLow.includes('invalid login credentials') || msgLow.includes('invalid credentials')) {
         setError('Correo o contraseña incorrectos')
+      } else if (err?.status === 429 || msgLow.includes('too many') || msgLow.includes('rate limit')) {
+        setError('Demasiados intentos. Espera unos minutos e intenta de nuevo.')
+      } else if (err?.status === 503 || msgLow.includes('no se pudo conectar') || msgLow.includes('servidor de autenticación')) {
+        setError('El servidor de autenticación no responde. Intenta de nuevo en unos segundos.')
       } else if (msgLow.includes('failed to fetch') || msgLow.includes('network') || msgLow.includes('load failed')) {
         setError('No se puede conectar al servidor. ¿Está el backend corriendo en localhost:8000?')
       } else if (msg) {

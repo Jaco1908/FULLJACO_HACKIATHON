@@ -20,9 +20,9 @@ _admin_cache: dict[str, tuple[bool, float]] = {}
 _ADMIN_CACHE_TTL = 60  # segundos
 
 
-def _get_jwks(supabase_url: str) -> dict:
+async def _get_jwks(supabase_url: str) -> dict:
     """
-    Obtiene las claves públicas JWKS de Supabase.
+    Obtiene las claves públicas JWKS de Supabase (async, no bloquea el event loop).
     Se cachean durante 1 hora para evitar peticiones repetidas.
     Supabase usa ES256 (ECDSA P-256) para firmar los JWT de usuario.
     """
@@ -31,10 +31,8 @@ def _get_jwks(supabase_url: str) -> dict:
     if _jwks_cache and (now - _jwks_cache_time) < _JWKS_CACHE_TTL:
         return _jwks_cache
 
-    resp = httpx.get(
-        f"{supabase_url}/auth/v1/.well-known/jwks.json",
-        timeout=10,
-    )
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{supabase_url}/auth/v1/.well-known/jwks.json")
     resp.raise_for_status()
     _jwks_cache = resp.json()
     _jwks_cache_time = now
@@ -53,7 +51,7 @@ def _get_public_key_from_jwks(jwks: dict, kid: str):
     return None
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     settings: Settings = Depends(get_settings),
 ) -> dict:
@@ -70,7 +68,7 @@ def get_current_user(
 
         if alg in ("ES256", "ES384", "ES512", "RS256", "RS384", "RS512"):
             # ── Tokens asimétricos (nuevo default de Supabase) ────────────────
-            jwks = _get_jwks(settings.supabase_url)
+            jwks = await _get_jwks(settings.supabase_url)
             if not kid:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,7 +79,7 @@ def get_current_user(
                 # Forzar recarga de JWKS (puede haberse rotado la clave)
                 global _jwks_cache
                 _jwks_cache = None
-                jwks = _get_jwks(settings.supabase_url)
+                jwks = await _get_jwks(settings.supabase_url)
                 public_key = _get_public_key_from_jwks(jwks, kid)
             if public_key is None:
                 raise HTTPException(

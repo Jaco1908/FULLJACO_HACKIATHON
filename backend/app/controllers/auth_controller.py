@@ -71,8 +71,15 @@ def _raise_from_supabase(response: httpx.Response, fallback: str) -> None:
     elif "password" in msg_lower and "characters" in msg_lower:
         msg = "La contraseña debe tener al menos 6 caracteres"
 
-    status = 401 if response.status_code in (400, 401, 422) else response.status_code
-    raise HTTPException(status_code=status, detail=msg)
+    # 400/422 de Supabase = credenciales inválidas o validación → 401 al cliente
+    # 422 sin mapear confunde al frontend (es un error de validación interna)
+    if response.status_code in (400, 401, 422):
+        http_status = 401
+    elif response.status_code == 429:
+        http_status = 429   # Rate limit — se pasa tal cual al frontend
+    else:
+        http_status = response.status_code
+    raise HTTPException(status_code=http_status, detail=msg)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -84,11 +91,17 @@ async def login(data: LoginRequest, settings: Settings = Depends(get_settings)):
     Devuelve access_token + refresh_token para que el frontend
     los almacene y use en peticiones autenticadas.
     """
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(
-            f"{settings.supabase_url}/auth/v1/token?grant_type=password",
-            headers=_supabase_headers(settings),
-            json={"email": data.email, "password": data.password},
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{settings.supabase_url}/auth/v1/token?grant_type=password",
+                headers=_supabase_headers(settings),
+                json={"email": data.email, "password": data.password},
+            )
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo conectar con el servidor de autenticación: {e}",
         )
 
     if response.status_code != 200:
@@ -115,15 +128,21 @@ async def register(data: RegisterRequest, settings: Settings = Depends(get_setti
     Si auto-confirm está activo devuelve la sesión directamente.
     Si requiere confirmación de email, devuelve email_confirmation_required=True.
     """
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(
-            f"{settings.supabase_url}/auth/v1/signup",
-            headers=_supabase_headers(settings),
-            json={
-                "email":    data.email,
-                "password": data.password,
-                "data":     {"nombre_completo": data.nombre_completo or data.email},
-            },
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{settings.supabase_url}/auth/v1/signup",
+                headers=_supabase_headers(settings),
+                json={
+                    "email":    data.email,
+                    "password": data.password,
+                    "data":     {"nombre_completo": data.nombre_completo or data.email},
+                },
+            )
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo conectar con el servidor de autenticación: {e}",
         )
 
     if response.status_code not in (200, 201):
@@ -179,17 +198,35 @@ async def reset_password(
     return {"message": "Si el correo existe, recibirás un enlace de recuperación"}
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = None
+
+
 @router.post("/refresh")
 async def refresh_token(
-    refresh_token: str,
+    data: RefreshRequest | None = None,
+    refresh_token: str | None = None,
     settings: Settings = Depends(get_settings),
 ):
-    """Renueva el access_token usando el refresh_token."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(
-            f"{settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
-            headers=_supabase_headers(settings),
-            json={"refresh_token": refresh_token},
+    """
+    Renueva el access_token usando el refresh_token.
+    Acepta el token como query param (?refresh_token=...) o en el body JSON.
+    """
+    token = (data.refresh_token if data else None) or refresh_token
+    if not token:
+        raise HTTPException(status_code=422, detail="refresh_token requerido")
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{settings.supabase_url}/auth/v1/token?grant_type=refresh_token",
+                headers=_supabase_headers(settings),
+                json={"refresh_token": token},
+            )
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo conectar con el servidor de autenticación: {e}",
         )
 
     if response.status_code != 200:
@@ -200,4 +237,6 @@ async def refresh_token(
         "access_token":  session["access_token"],
         "refresh_token": session["refresh_token"],
         "expires_in":    session.get("expires_in", 3600),
+        "token_type":    session.get("token_type", "bearer"),
+        "user":          session.get("user", {}),
     }
