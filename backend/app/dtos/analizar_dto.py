@@ -2,11 +2,17 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
 
+class MensajeDTO(BaseModel):
+    """Un turno de la conversación: siempre con role y content explícitos."""
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1)
+
+
 class AnalizarRequest(BaseModel):
     texto: str = Field(..., min_length=3, max_length=2000)
-
-    historial: Optional[list[str]] = Field(default_factory=list)
-
+    # Historial de turnos previos con roles explícitos.
+    # Formato: [{role: "user", content: "..."}, {role: "assistant", content: "..."}, ...]
+    historial: Optional[list[MensajeDTO]] = Field(default_factory=list)
 
 
 class HospitalDTO(BaseModel):

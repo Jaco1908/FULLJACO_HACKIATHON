@@ -43,8 +43,16 @@ export default function Chat() {
   const [resultado, setResultado] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CHAT_KEY))?.resultado || null } catch (err) { return null }
   })
+  // historialIA: [{role: "user"|"assistant", content: string}]
+  // Roles siempre explícitos — nunca se infieren por paridad de índice.
   const [historialIA, setHistorialIA] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CHAT_KEY))?.historialIA || [] } catch (err) { return [] }
+    try {
+      const raw = JSON.parse(localStorage.getItem(CHAT_KEY))?.historialIA
+      if (!Array.isArray(raw)) return []
+      // Migración defensiva: descartar entradas en formato plano (string) del caché antiguo
+      const esValido = raw.every(m => m && typeof m === 'object' && m.role && m.content)
+      return esValido ? raw : []
+    } catch (err) { return [] }
   })
   const [alertas, setAlertas]               = useState([])
   const [emergenciaModal, setEmergenciaModal] = useState(null)
@@ -110,18 +118,29 @@ export default function Chat() {
   async function enviar(texto) {
     if (!texto.trim()) return
     const ts = new Date()
+
+    // Snapshot del historial actual ANTES de cualquier actualización de estado.
+    // Esto evita que un closure obsoleto lea una versión desactualizada.
+    const historialActual = historialIA
+
     setMensajes(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content: texto, ts }])
     setInput('')
     setLoading(true)
     setAlertas([])
 
     try {
-      // El backend obtiene el plan del usuario autenticado — no se envía desde el frontend
-      const data = await analizarSintomas(texto, historialIA)
+      // El backend obtiene el plan del usuario autenticado — no se envía desde el frontend.
+      // historialActual ya tiene {role, content}[] con roles explícitos.
+      const data = await analizarSintomas(texto, historialActual)
       const tsResp = new Date()
 
       if (data.tipo === 'emergencia') {
-        setHistorialIA(prev => [...prev, texto, data.mensaje])
+        // Registrar: turno del usuario + respuesta de emergencia del asistente
+        setHistorialIA(prev => [
+          ...prev,
+          { role: 'user',      content: texto        },
+          { role: 'assistant', content: data.mensaje  },
+        ])
         setEmergenciaModal(data.mensaje)
         setMensajes(prev => [...prev, {
           id: crypto.randomUUID(), role: 'assistant',
@@ -132,21 +151,33 @@ export default function Chat() {
         })
 
       } else if (data.tipo === 'pregunta') {
-        setHistorialIA(prev => [...prev, texto, data.pregunta])
+        const textoPregunta = data.pregunta || data.contenido || '…'
+        // Registrar: turno del usuario + pregunta del asistente (ambos con role explícito)
+        setHistorialIA(prev => [
+          ...prev,
+          { role: 'user',      content: texto        },
+          { role: 'assistant', content: textoPregunta },
+        ])
         setMensajes(prev => [...prev, {
           id: crypto.randomUUID(), role: 'assistant',
-          content: data.pregunta, opciones: data.opciones, tipo: 'pregunta', ts: tsResp,
+          content: textoPregunta,
+          opciones: data.opciones?.length ? data.opciones : null,
+          tipo: 'pregunta', ts: tsResp,
         }])
 
       } else if (data.tipo === 'diagnostico') {
-        setHistorialIA(prev => [...prev, texto])
+        // El diagnóstico cierra la conversación; solo guardamos el turno del usuario
+        setHistorialIA(prev => [
+          ...prev,
+          { role: 'user', content: texto },
+        ])
         setMensajes(prev => [...prev, {
           id: crypto.randomUUID(), role: 'assistant',
           content: 'He analizado tus síntomas. Aquí tienes tu estimación de copago:',
           tipo: 'diagnostico', ts: tsResp,
         }])
         setResultado(data)
-        generarAlertas(data)   // usa datos del backend, sin calcular nada aquí
+        generarAlertas(data)
         await guardarConsulta({
           sintomas: texto,
           especialidad_sugerida: data.especialidad,
@@ -294,8 +325,20 @@ export default function Chat() {
     doc.save(`SaludIA_Copago_${resultado.especialidad}_${fecha.replace(/ /g, '_')}.pdf`)
   }
 
-  const urgenciaColor = { normal: '#10b981', urgente: '#f59e0b', emergencia: '#ef4444' }
-  const urgenciaLabel = { normal: 'Normal', urgente: 'Urgente', emergencia: 'Emergencia' }
+  // Soporta tanto el formato legado (normal/urgente/emergencia)
+  // como el nuevo formato del prompt (bajo/medio/alto)
+  const urgenciaColor = {
+    normal: '#10b981',    bajo: '#10b981',
+    urgente: '#f59e0b',   medio: '#f59e0b',
+    alto: '#ef4444',
+    emergencia: '#ef4444',
+  }
+  const urgenciaLabel = {
+    normal: 'Normal',     bajo: 'Bajo',
+    urgente: 'Urgente',   medio: 'Medio',
+    alto: 'Alto',
+    emergencia: 'Emergencia',
+  }
 
   function fmtTime(ts) {
     if (!ts) return ''

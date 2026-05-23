@@ -3,8 +3,14 @@ import { api } from './client'
 /**
  * Analiza síntomas con IA.
  * El backend obtiene el plan del usuario autenticado — ya no se envía desde el frontend.
- * @param {string} texto - Síntomas descritos por el paciente
- * @param {string[]} historial - Historial de mensajes anteriores
+ *
+ * @param {string} texto - Mensaje actual del paciente
+ * @param {Array<{role: "user"|"assistant", content: string}>} historial
+ *        Turnos previos con roles explícitos. NO incluye el mensaje actual (texto).
+ *        Ejemplo: [
+ *          { role: "user",      content: "me duele el cuello" },
+ *          { role: "assistant", content: "¿El dolor es constante o va y viene?" },
+ *        ]
  */
 export async function analizarSintomas(texto, historial = []) {
   return api.post('/analizar', { texto, historial })

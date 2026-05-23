@@ -16,6 +16,63 @@ router = APIRouter(
 _hospital_repo = HospitalRepository()
 
 
+def _calcular_edad(fecha_nacimiento) -> str | None:
+    """Calcula edad en años a partir de fecha_nacimiento (str ISO o date)."""
+    if not fecha_nacimiento:
+        return None
+    try:
+        from datetime import date
+        if isinstance(fecha_nacimiento, str):
+            from datetime import datetime
+            fn = datetime.strptime(fecha_nacimiento[:10], "%Y-%m-%d").date()
+        else:
+            fn = fecha_nacimiento
+        hoy = date.today()
+        edad = hoy.year - fn.year - ((hoy.month, hoy.day) < (fn.month, fn.day))
+        return str(edad)
+    except Exception:
+        return str(fecha_nacimiento)
+
+
+def _extraer_perfil_data(perfil: dict | None) -> dict:
+    """
+    Extrae los campos clínicos del perfil del usuario para inyectarlos en el prompt.
+    Usa valores legibles si los campos no están presentes en la tabla.
+    """
+    if not perfil:
+        return {}
+
+    # Edad: puede venir como campo directo o calcularse desde fecha_nacimiento
+    edad = perfil.get("edad") or _calcular_edad(perfil.get("fecha_nacimiento"))
+
+    sexo_raw = perfil.get("sexo") or perfil.get("genero")
+    sexo_map = {
+        "M": "Masculino", "F": "Femenino",
+        "masculino": "Masculino", "femenino": "Femenino",
+        "male": "Masculino", "female": "Femenino",
+    }
+    sexo = sexo_map.get(str(sexo_raw).strip(), sexo_raw) if sexo_raw else None
+
+    antecedentes = (
+        perfil.get("antecedentes")
+        or perfil.get("antecedentes_medicos")
+        or perfil.get("historial_medico")
+    )
+
+    medicacion = (
+        perfil.get("medicacion")
+        or perfil.get("medicacion_actual")
+        or perfil.get("medicamentos")
+    )
+
+    return {
+        "edad": edad or "No especificada",
+        "sexo": sexo or "No especificado",
+        "antecedentes": antecedentes or "Ninguno registrado",
+        "medicacion": medicacion or "Ninguna registrada",
+    }
+
+
 @router.post("")
 @limiter.limit("10/minute")
 async def analizar(
@@ -44,15 +101,22 @@ async def analizar(
                 for c in coberturas_raw
             }
 
+    # Extraer datos clínicos del perfil para el prompt
+    perfil_data = _extraer_perfil_data(perfil)
+
+    # Convertir lista de MensajeDTO a dicts planos para el servicio
+    historial_dicts = [m.model_dump() for m in (data.historial or [])]
+
     try:
         return await analizar_sintomas(
             texto=data.texto,
-            historial=data.historial,
+            historial=historial_dicts,
             plan_cobertura=plan_cobertura,
             plan_nombre=plan_nombre,
             aseguradora=aseguradora,
             coberturas_por_especialidad=coberturas,
             hospital_repo=_hospital_repo,
+            perfil_data=perfil_data,
         )
 
     except IAServiceError as e:
