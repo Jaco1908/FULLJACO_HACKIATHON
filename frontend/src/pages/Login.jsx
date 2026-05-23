@@ -33,7 +33,7 @@ export default function Login() {
       } else if (err?.status === 503 || msgLow.includes('no se pudo conectar') || msgLow.includes('servidor de autenticación')) {
         setError('El servidor de autenticación no responde. Intenta de nuevo en unos segundos.')
       } else if (msgLow.includes('failed to fetch') || msgLow.includes('network') || msgLow.includes('load failed')) {
-        setError('No se puede conectar al servidor. ¿Está el backend corriendo en localhost:8000?')
+        setError('No se puede conectar al servidor. Verifica tu conexión e intenta de nuevo.')
       } else if (msg) {
         setError(msg)
       } else {
