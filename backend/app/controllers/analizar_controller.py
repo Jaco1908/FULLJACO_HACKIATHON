@@ -93,13 +93,18 @@ async def analizar(
         aseguradora = (plan_seguro.get("aseguradora") or {}).get("nombre")
         coberturas_raw = plan_seguro.get("coberturas", [])
         if coberturas_raw:
-            coberturas = {
-                c["especialidad"]: {
-                    "pct": c["porcentaje_cobertura"],
-                    "copago": c["copago_fijo"],
-                }
-                for c in coberturas_raw
-            }
+            coberturas = {}
+            for c in coberturas_raw:
+                esp = c["especialidad"]
+                pct = c["porcentaje_cobertura"]
+                copago = c.get("copago_fijo") or 0
+                # Indexar con y sin tilde para hacer match con lo que devuelve la IA
+                tabla = str.maketrans("áéíóúÁÉÍÓÚ", "aeiouAEIOU")
+                esp_norm = esp.translate(tabla)
+                entry = {"pct": pct, "copago": copago}
+                coberturas[esp] = entry
+                if esp_norm != esp:
+                    coberturas[esp_norm] = entry
 
     # Extraer datos clínicos del perfil para el prompt
     perfil_data = _extraer_perfil_data(perfil)

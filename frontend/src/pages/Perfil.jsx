@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { actualizarPerfil } from '../api/perfil.api'
 import { getAseguradoras, getPlanes } from '../api/planes.api'
-import { User, ShieldCheck, Save, CheckCircle } from 'lucide-react'
+import { User, ShieldCheck, Save, CheckCircle, RefreshCw } from 'lucide-react'
 
 export default function Perfil() {
   const { user, perfil, loading: authLoading, recargarPerfil } = useAuth()
@@ -61,6 +61,16 @@ export default function Perfil() {
   }
 
   if (authLoading) return <div className="page-loading">Cargando...</div>
+
+  // Perfil vacío pero usuario logueado → el backend tardó en responder
+  if (!perfil && user) return (
+    <div className="page-loading" style={{ flexDirection: 'column', gap: '1rem' }}>
+      <p style={{ color: 'var(--text2)' }}>El servidor tardó en cargar tu perfil.</p>
+      <button className="btn-primary" style={{ width: 'auto' }} onClick={recargarPerfil}>
+        <RefreshCw size={15}/> Recargar perfil
+      </button>
+    </div>
+  )
 
   const planActual        = perfil?.plan_seguro
   const aseguradoraActual = planActual?.aseguradora

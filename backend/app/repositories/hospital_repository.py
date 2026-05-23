@@ -51,6 +51,32 @@ class HospitalRepository:
             )
             return []
 
+    def get_by_especialidad_and_aseguradora(
+        self, especialidad: str, aseguradora: str
+    ) -> list[dict]:
+        """
+        Busca hospitales que cubran la especialidad Y acepten la aseguradora dada.
+        Usa la columna `aseguradoras` (JSONB array de nombres).
+        Si falla o no hay resultados, devuelve lista vacía para que el caller use fallback.
+        """
+        try:
+            response = (
+                self.db.table("hospitales")
+                .select("*")
+                .contains("especialidades", [especialidad])
+                .contains("aseguradoras", [aseguradora])
+                .execute()
+            )
+            return response.data or []
+        except Exception as exc:
+            logger.warning(
+                "get_by_especialidad_and_aseguradora(%s, %s) falló: %s",
+                especialidad,
+                aseguradora,
+                exc,
+            )
+            return []
+
     def get_precios_por_especialidad(self) -> dict[str, int]:
         """
         Lee precios de la tabla `precios_especialidad`.

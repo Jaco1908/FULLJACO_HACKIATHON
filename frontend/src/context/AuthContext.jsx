@@ -39,7 +39,7 @@ function clearSessionFromStorage() {
 
 /**
  * POST al backend para autenticación.
- * El frontend NUNCA llama a Supabase directamente — usa localhost:8000.
+ * El frontend NUNCA llama a Supabase directamente — usa el backend.
  */
 async function authFetch(endpoint, body) {
   const response = await fetch(`${BACKEND}${endpoint}`, {
@@ -85,17 +85,25 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  /** Carga el perfil desde el backend (plan, aseguradora, coberturas, es_admin). */
+  /** Carga el perfil desde el backend con reintentos automáticos. */
   async function cargarPerfil() {
-    try {
-      const data = await getPerfil()
-      setPerfil(data)
-    } catch (error) {
-      console.error('[AuthContext] Error al cargar perfil:', error)
-      setPerfil(null)
-    } finally {
-      setLoading(false)
+    const MAX = 4
+    for (let i = 1; i <= MAX; i++) {
+      try {
+        const data = await getPerfil()
+        setPerfil(data)
+        setLoading(false)
+        return
+      } catch (error) {
+        if (i === MAX) {
+          console.error('[AuthContext] No se pudo cargar el perfil:', error)
+          setPerfil(null)
+        } else {
+          await new Promise(r => setTimeout(r, 3000))
+        }
+      }
     }
+    setLoading(false)
   }
 
   async function recargarPerfil() {
@@ -109,6 +117,9 @@ export function AuthProvider({ children }) {
    */
   async function iniciarSesion(email, password) {
     const sessionData = await authFetch('/auth/login', { email, password })
+
+    // Limpiar sesión de chat anterior al iniciar sesión
+    localStorage.removeItem('saludia_chat_session')
 
     // Escribir en localStorage en el formato del SDK → getSession() lo leerá sin red
     writeSessionToStorage(sessionData)

@@ -55,11 +55,47 @@ _URGENCIA_MAP = {
 }
 
 
-def _buscar_hospitales(especialidad: str, hospital_repo: HospitalRepository):
-    disponibles = hospital_repo.get_by_especialidad(especialidad)
+def _normalizar_especialidad(especialidad: str) -> str:
+    """Normaliza tildes para hacer match con ambas versiones en la BD."""
+    tabla = str.maketrans("áéíóúÁÉÍÓÚ", "aeiouAEIOU")
+    return especialidad.translate(tabla)
 
+
+def _buscar_hospitales(
+    especialidad: str,
+    hospital_repo: HospitalRepository,
+    aseguradora: str | None = None,
+):
+    # 1. Filtrar por aseguradora + especialidad (con y sin tilde)
+    if aseguradora:
+        disponibles = hospital_repo.get_by_especialidad_and_aseguradora(
+            especialidad, aseguradora
+        )
+        if not disponibles:
+            esp_norm = _normalizar_especialidad(especialidad)
+            if esp_norm != especialidad:
+                disponibles = hospital_repo.get_by_especialidad_and_aseguradora(
+                    esp_norm, aseguradora
+                )
+
+    else:
+        disponibles = []
+
+    # 2. Fallback: solo por especialidad (con y sin tilde)
+    if not disponibles:
+        disponibles = hospital_repo.get_by_especialidad(especialidad)
+    if not disponibles:
+        esp_norm = _normalizar_especialidad(especialidad)
+        if esp_norm != especialidad:
+            disponibles = hospital_repo.get_by_especialidad(esp_norm)
+
+    # 3. Fallback: Medicina General
     if not disponibles:
         disponibles = hospital_repo.get_by_especialidad("Medicina General")
+
+    # 4. Fallback final: todos los hospitales
+    if not disponibles:
+        disponibles = hospital_repo.get_all()
 
     for h in disponibles:
         if "precio" not in h:
@@ -82,18 +118,32 @@ def _construir_system_prompt(num_intercambios: int, perfil_data: dict | None = N
     system = system.replace("{antecedentes}", str(pd.get("antecedentes") or "Ninguno conocido"))
     system = system.replace("{medicacion}",   str(pd.get("medicacion")   or "Ninguna"))
 
-    # Instrucciones contextuales por turno
+    # Instrucciones contextuales por turno — guía clínica específica + límites dinámicos
     if num_intercambios == 0:
         system += (
-            "\n\n⚠️ TURNO INICIAL: Haz tu primera pregunta para conocer la localización "
-            "exacta y la naturaleza del síntoma principal. Responde con JSON tipo 'pregunta'."
+            "\n\n⚠️ TURNO 1: Haz UNA sola pregunta sobre las características del síntoma "
+            "(localización exacta, tipo de dolor/molestia, intensidad 1-10). "
+            "Responde con JSON tipo 'pregunta'."
+        )
+    elif num_intercambios == 1:
+        system += (
+            "\n\n⚠️ TURNO 2: Haz UNA sola pregunta sobre tiempo de evolución "
+            "(¿cuándo empezó?, ¿es continuo o intermitente?). "
+            "Responde con JSON tipo 'pregunta'."
+        )
+    elif num_intercambios == 2:
+        system += (
+            "\n\n⚠️ TURNO 3: Haz UNA sola pregunta sobre síntomas acompañantes "
+            "(fiebre, náuseas, mareo, dificultad respiratoria, etc.). "
+            "Responde con JSON tipo 'pregunta'."
         )
     elif num_intercambios < MIN_INTERCAMBIOS:
         restantes = MIN_INTERCAMBIOS - num_intercambios
         system += (
-            f"\n\n⚠️ ENTREVISTA EN PROGRESO: Llevas {num_intercambios} pregunta(s). "
-            f"Necesitas al menos {restantes} más antes de poder emitir diagnóstico "
-            f"(mínimo {MIN_INTERCAMBIOS} preguntas). Continúa indagando. "
+            f"\n\n⚠️ TURNO {num_intercambios + 1}: Pregunta sobre antecedentes o factores de riesgo "
+            f"(enfermedades previas, medicamentos, alergias). "
+            f"Si confianza ≥85% puedes dar diagnóstico ahora. "
+            f"Si no, necesitas {restantes} pregunta(s) más. "
             "Responde con JSON tipo 'pregunta'."
         )
     elif num_intercambios >= MAX_INTERCAMBIOS:
@@ -158,16 +208,15 @@ def _procesar_respuesta_ia(
         if especialidad not in ESPECIALIDADES_VALIDAS:
             especialidad = "Medicina General"
 
-        # Normalizar nivel_urgencia (nuevo formato → legado)
+        # Normalizar nivel_urgencia (nuevo formato "bajo/medio/alto" → legado "normal/urgente/emergencia")
         nivel_urgencia_raw = data.get("nivel_urgencia", "bajo")
-        nivel_urgencia = _URGENCIA_MAP.get(
-            str(nivel_urgencia_raw).lower(), "normal"
-        )
+        nivel_urgencia = _URGENCIA_MAP.get(str(nivel_urgencia_raw).lower(), "normal")
 
         # Normalizar confianza (0.0–1.0 ó 0–100 → entero 0–100)
         confianza = _normalizar_confianza(data.get("confianza", 0.8))
 
-        hospitales_disp = _buscar_hospitales(especialidad, hospital_repo)
+        # Buscar hospitales filtrando por aseguradora del usuario
+        hospitales_disp = _buscar_hospitales(especialidad, hospital_repo, aseguradora)
 
         hospital = (
             hospitales_disp[0]
@@ -196,22 +245,26 @@ def _procesar_respuesta_ia(
             copago = calcular_copago(precio, plan_cobertura)
             cobertura_aplicada = plan_cobertura
 
-        for h in hospitales_disp:
+        for i, h in enumerate(hospitales_disp):
             precio_h = h.get("precio", settings.fallback_price)
             if cobertura_esp:
-                h["copago"] = max(calcular_copago(precio_h, pct), copago_fijo)
+                copago_pct_h = calcular_copago(precio_h, pct)
+                h["copago"] = max(copago_pct_h, copago_fijo)
+                h["usa_copago_fijo"] = copago_pct_h < copago_fijo
+                h["cobertura_pct"] = pct
             else:
                 h["copago"] = calcular_copago(precio_h, plan_cobertura)
+                h["usa_copago_fijo"] = False
+                h["cobertura_pct"] = plan_cobertura
+            # Primer hospital (menor copago tras sort) = mejor opción
+            h["recomendado"] = i == 0
 
         return {
             "tipo": "diagnostico",
             "especialidad": especialidad,
             "nivel_urgencia": nivel_urgencia,
             "confianza": confianza,
-            "razon": data.get(
-                "razon",
-                "Posible diagnóstico generado por IA."
-            ),
+            "razon": data.get("razon", "Posible diagnóstico generado por IA."),
             "copago": copago,
             "precio_consulta": precio,
             "cobertura_aplicada": cobertura_aplicada,
@@ -221,7 +274,7 @@ def _procesar_respuesta_ia(
             "aseguradora": aseguradora,
             "hospital": hospital.get("nombre", "Hospital General"),
             "ciudad_hospital": hospital.get("ciudad", "Quito"),
-            "hospitales_disponibles": hospitales_disp[:3],
+            "hospitales_disponibles": hospitales_disp,
         }
 
     raise IAServiceError("Tipo de respuesta IA no reconocido")

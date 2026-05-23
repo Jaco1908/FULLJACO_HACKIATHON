@@ -117,6 +117,22 @@ export default function Chat() {
 
   async function enviar(texto) {
     if (!texto.trim()) return
+
+    // Si ya hay un diagnóstico, arrancar consulta nueva automáticamente
+    let historialParaEnviar = historialIA
+    if (resultado) {
+      localStorage.removeItem(CHAT_KEY)
+      setResultado(null)
+      setAlertas([])
+      setHospitalSeleccionado(null)
+      setHistorialIA([])
+      historialParaEnviar = []
+      setMensajes([{
+        id: crypto.randomUUID(), role: 'assistant',
+        content: '¡Entendido! Cuéntame qué síntomas tienes ahora.', ts: new Date(),
+      }])
+    }
+
     const ts = new Date()
 
     // Snapshot del historial actual ANTES de cualquier actualización de estado.
@@ -129,9 +145,8 @@ export default function Chat() {
     setAlertas([])
 
     try {
-      // El backend obtiene el plan del usuario autenticado — no se envía desde el frontend.
-      // historialActual ya tiene {role, content}[] con roles explícitos.
-      const data = await analizarSintomas(texto, historialActual)
+      // historialParaEnviar: [] si es nueva consulta, historial actual si continúa
+      const data = await analizarSintomas(texto, historialParaEnviar)
       const tsResp = new Date()
 
       if (data.tipo === 'emergencia') {
@@ -532,45 +547,72 @@ export default function Chat() {
 
             {resultado.hospitales_disponibles?.length > 0 && (
               <div className="hospitales-section">
-                <h4><Building2 size={15}/> Hospitales disponibles para {resultado.especialidad}</h4>
+                <h4>
+                  <Building2 size={15}/> Hospitales con {resultado.aseguradora || 'tu seguro'} · {resultado.especialidad}
+                  <span className="hospitales-count">{resultado.hospitales_disponibles.length} disponible{resultado.hospitales_disponibles.length !== 1 ? 's' : ''}</span>
+                </h4>
                 {resultado.hospitales_disponibles.map((h, i) => {
-                  const seleccionado = hospitalSeleccionado?.nombre === h.nombre
-                  // h.copago viene del backend — no se calcula en el frontend
+                  const expandido = hospitalSeleccionado?.nombre === h.nombre
                   const copagoH = h.copago ?? 0
+                  const esMejor = h.recomendado === true
                   return (
                     <div
                       key={h.nombre ?? i}
-                      className={`hospital-row ${i === 0 && !hospitalSeleccionado ? 'hospital-recomendado' : ''} ${seleccionado ? 'hospital-seleccionado' : ''}`}
-                      onClick={() => setHospitalSeleccionado(seleccionado ? null : h)}
+                      className={`hospital-row ${esMejor ? 'hospital-recomendado' : ''} ${expandido ? 'hospital-seleccionado' : ''}`}
+                      onClick={() => setHospitalSeleccionado(expandido ? null : h)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <div>
-                        <span className="hospital-nombre">{h.nombre}</span>
-                        {i === 0 && !hospitalSeleccionado && <span className="tag-recomendado">Recomendado</span>}
-                        {seleccionado && <span className="tag-elegido">✓ Elegido</span>}
-                        <br/>
-                        <span className="hospital-ciudad"><MapPin size={11}/> {h.ciudad}</span>
+                      {/* Fila principal */}
+                      <div className="hospital-row-header">
+                        <div style={{ flex: 1 }}>
+                          <span className="hospital-nombre">{h.nombre}</span>
+                          {esMejor && <span className="tag-recomendado">⭐ Mejor opción</span>}
+                          {expandido && <span className="tag-elegido">✓ Elegido</span>}
+                          <br/>
+                          <span className="hospital-ciudad"><MapPin size={11}/> {h.ciudad}</span>
+                        </div>
+                        <div className="hospital-precios">
+                          <span className="precio-base">${Number(h.precio).toFixed(2)}</span>
+                          <div style={{ textAlign: 'right' }}>
+                            <span className="copago-hos">
+                              Copago: <strong>${Number(copagoH).toFixed(2)}</strong>
+                            </span>
+                            {h.cobertura_pct != null && (
+                              <span className="hospital-cobertura-tag">
+                                {h.usa_copago_fijo
+                                  ? `Mín. plan · ${h.cobertura_pct}% cub.`
+                                  : `${h.cobertura_pct}% cubierto`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="hospital-precios">
-                        <span className="precio-base">${h.precio}</span>
-                        <span className="copago-hos">Copago: ${Number(copagoH).toFixed(2)}</span>
-                      </div>
+
+                      {/* Acordeón — detalle inline */}
+                      {expandido && (
+                        <div className="hospital-detalle" onClick={e => e.stopPropagation()}>
+                          {h.direccion && (
+                            <p className="hospital-detalle-row">
+                              <MapPin size={12}/> {h.direccion}
+                            </p>
+                          )}
+                          {h.telefono && (
+                            <p className="hospital-detalle-row">
+                              📞{' '}
+                              <a href={`tel:${h.telefono}`} className="hospital-tel-link">
+                                {h.telefono}
+                              </a>
+                            </p>
+                          )}
+                          <p className="hospital-detalle-row hospital-detalle-hint">
+                            Menciona <strong>{resultado.especialidad}</strong> y tu copago:{' '}
+                            <strong>${Number(copagoH).toFixed(2)}</strong>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
-                {hospitalSeleccionado && (
-                  <div className="hospital-agenda-info">
-                    <Building2 size={16}/>
-                    <div>
-                      <strong>{hospitalSeleccionado.nombre}</strong> — {hospitalSeleccionado.ciudad}
-                      <p>
-                        Para agendar tu cita de <strong>{resultado.especialidad}</strong>,
-                        contacta directamente al hospital con esta estimación de copago:{' '}
-                        <strong>${Number(hospitalSeleccionado.copago ?? 0).toFixed(2)}</strong>
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -581,11 +623,16 @@ export default function Chat() {
         <div ref={bottomRef}/>
       </div>
 
+      {resultado && (
+        <div className="nueva-consulta-hint">
+          ¿Tienes otro síntoma? Escribe y comenzamos una nueva consulta
+        </div>
+      )}
       <form className="chat-input-bar" onSubmit={e => { e.preventDefault(); enviar(input) }}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Describe tus síntomas..."
+          placeholder={resultado ? 'Describe tus nuevos síntomas...' : 'Describe tus síntomas...'}
           disabled={loading}
         />
         <button type="submit" disabled={loading || !input.trim()}><Send size={20}/></button>

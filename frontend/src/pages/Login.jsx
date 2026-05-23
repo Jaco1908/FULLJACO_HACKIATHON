@@ -22,8 +22,6 @@ export default function Login() {
       await iniciarSesion(form.email, form.password)
       navigate('/chat')
     } catch (err) {
-      // El backend ya devuelve mensajes traducidos al español.
-      // Solo mapeamos los mensajes en inglés que aún pudieran llegar del SDK.
       const msg = err?.message || ''
       const msgLow = msg.toLowerCase()
       if (msgLow.includes('email not confirmed') || msgLow.includes('debes confirmar')) {
@@ -37,7 +35,6 @@ export default function Login() {
       } else if (msgLow.includes('failed to fetch') || msgLow.includes('network') || msgLow.includes('load failed')) {
         setError('No se puede conectar al servidor. ¿Está el backend corriendo en localhost:8000?')
       } else if (msg) {
-        // Mostrar el mensaje del backend directamente (ya está en español)
         setError(msg)
       } else {
         setError('Error al iniciar sesión. Intenta de nuevo.')
@@ -59,7 +56,6 @@ export default function Login() {
           redirect_to: `${window.location.origin}/reset-password`,
         }),
       })
-      // Supabase siempre devuelve OK aunque el email no exista (seguridad)
       setResetSent(true)
     } catch {
       setError('Error al enviar el correo. Verifica tu conexión.')
@@ -99,7 +95,7 @@ export default function Login() {
               </div>
               {error && <div className="error-msg">{error}</div>}
               <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? 'Ingresando...' : 'Iniciar sesión'}
+                {loading ? 'Conectando con el servidor...' : 'Iniciar sesión'}
               </button>
             </form>
             <p style={{textAlign:'center', marginTop:'0.75rem'}}>
