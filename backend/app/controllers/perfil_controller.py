@@ -27,6 +27,7 @@ def _build_perfil_response(perfil: dict, email: str) -> PerfilResponse:
             nombre=raw_plan["nombre"],
             prima_mensual=raw_plan.get("prima_mensual"),
             deducible_anual=raw_plan.get("deducible_anual"),
+            aseguradora_id=aseg.get("id"),
             aseguradora_nombre=aseg.get("nombre"),
             coberturas=coberturas,
         )

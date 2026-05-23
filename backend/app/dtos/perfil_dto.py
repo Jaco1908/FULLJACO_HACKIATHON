@@ -13,6 +13,7 @@ class PlanSeguroDTO(BaseModel):
     nombre: str
     prima_mensual: Optional[float]
     deducible_anual: Optional[float]
+    aseguradora_id: Optional[str]
     aseguradora_nombre: Optional[str]
     coberturas: list[CoberturaDTO] = []
 
