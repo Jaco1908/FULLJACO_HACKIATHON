@@ -425,21 +425,21 @@ export default function Chat() {
           <div key={m.id} className={`message ${m.role}`}>
             {m.role === 'assistant' && (
               <div className="chat-avatar">
-                <Activity size={16} color="#2563eb"/>
+                <Activity size={14} color="#fff"/>
               </div>
             )}
             <div style={{
-              display: 'flex', flexDirection: 'column', gap: '0.2rem',
+              display: 'flex', flexDirection: 'column', gap: '0.18rem',
               alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
             }}>
               {m.tipo === 'emergencia' ? (
                 <div className="alert-emergencia">
-                  <AlertTriangle size={20}/>
+                  <AlertTriangle size={18}/>
                   <span>{m.content}</span>
                 </div>
               ) : (
                 <div className="bubble">
-                  <p>{m.content}</p>
+                  <p style={{ margin: 0 }}>{m.content}</p>
                   {m.opciones && (
                     <div className="opciones">
                       {m.opciones.map((op, j) => (
@@ -456,10 +456,10 @@ export default function Chat() {
 
         {loading && (
           <div className="message assistant">
-            <div className="chat-avatar"><Activity size={16} color="#2563eb"/></div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <div className="chat-avatar"><Activity size={14} color="#fff"/></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem' }}>
               <div className="bubble typing"><span/><span/><span/></div>
-              <span className="msg-time">SaludIA está analizando...</span>
+              <span className="msg-time">Analizando síntomas...</span>
             </div>
           </div>
         )}
@@ -468,9 +468,9 @@ export default function Chat() {
         {resultado && (
           <div className="resultado-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0 }}><CheckCircle size={18}/> Estimación de copago</h3>
+              <h3 style={{ margin: 0 }}><CheckCircle size={16}/> Estimación de copago</h3>
               <button className="btn-pdf" onClick={exportarPDF} title="Descargar PDF">
-                <Download size={15}/> PDF
+                <Download size={14}/> Exportar PDF
               </button>
             </div>
 
