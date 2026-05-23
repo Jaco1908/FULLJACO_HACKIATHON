@@ -1,282 +1,492 @@
-# SaludIA 🏥🤖
+# SaludIA
 
-> **HackIAthon 2025 · Ecuador**  
+> **HackIAthon 2025 · Ecuador**
 > Reto #3 — Estimador Agéntico de Copago y Cobertura para el Paciente
 
-SaludIA es un asistente de triaje médico inteligente que analiza los síntomas del paciente, sugiere la especialidad médica correcta y le indica exactamente cuánto pagará de copago según su plan de seguro.
+---
+
+## Descripcion del proyecto
+
+SaludIA es una plataforma web de triaje medico asistido por inteligencia artificial. Su proposito principal es ayudar al paciente a entender, antes de ir al medico, tres cosas concretas:
+
+1. **A que especialidad debe ir** segun los sintomas que describe.
+2. **Que nivel de urgencia tiene su caso** (normal, urgente o emergencia).
+3. **Cuanto pagara de copago** dependiendo del plan de seguro medico que tiene contratado.
+
+El sistema conduce una entrevista conversacional de hasta seis turnos, haciendo preguntas precisas sobre el sintoma principal, la evolucion temporal y los sintomas acompanantes, antes de emitir una estimacion. Si en cualquier momento detecta senales de emergencia medica, interrumpe la entrevista y le indica al usuario que llame al ECU 911.
 
 ---
 
-## ¿Qué hace?
+## Acceso rapido
 
-1. **Triaje conversacional** — El paciente describe sus síntomas; la IA hace hasta 2 preguntas de precisión y en el tercer turno emite el diagnóstico de especialidad.
-2. **Detección de emergencias** — Reconoce síntomas críticos en cualquier turno y responde de inmediato con instrucciones para llamar al ECU 911.
-3. **Estimación de copago** — Cruza la especialidad sugerida con el plan de seguro del paciente y calcula exactamente cuánto paga él vs. cuánto cubre la aseguradora.
-4. **Comparador de planes** — Compara todas las aseguradoras y planes disponibles para cualquier especialidad.
-5. **Insights personalizados** — Resumen mensual de consultas, especialidades frecuentes y recomendación de planes.
-6. **Panel admin** — CRUD completo de aseguradoras, planes, coberturas y hospitales.
-
----
-
-## Arquitectura
-
-```
-[React Frontend]
-      │
-      │  JWT (Supabase Auth)
-      ▼
-[FastAPI Backend]   ←──  Groq API (Llama 3.3 70B)
-      │
-      │  service_role key
-      ▼
-[Supabase · PostgreSQL]
-```
-
-**Regla de oro:**
-- El **frontend** solo llama a `supabase.auth.*` — nunca hace queries de datos.
-- Todo pasa por el **backend**, que valida el JWT y ejecuta la lógica de negocio.
-- El **backend** accede a Supabase con `service_role` (bypasea RLS).
-
----
-
-## Stack tecnológico
-
-| Capa | Tecnología |
+| Recurso | URL |
 |---|---|
-| Frontend | React 19 + Vite 8 + React Router 7 |
-| UI | Lucide React + CSS custom (variables) |
-| PDF | jsPDF |
-| Auth (cliente) | Supabase JS `^2.106` — solo auth |
-| Backend | FastAPI `0.136` · Python 3.11+ |
-| IA | Groq API — Llama 3.3 70B Versatile |
-| Base de datos | Supabase (PostgreSQL) |
-| Auth (servidor) | PyJWT `2.13` — HS256, audience="authenticated" |
-| Rate limiting | slowapi `0.1.9` — 10 req/min en `/analizar` |
-| Config | pydantic-settings `2.9` |
+| Aplicacion en produccion | https://saludia-six.vercel.app |
+| API del backend | https://fulljaco-hackiathon.onrender.com |
+| Health check del backend | https://fulljaco-hackiathon.onrender.com/health |
+| Documentacion Swagger (solo en desarrollo) | http://localhost:8000/docs |
+
+### Usuario de prueba
+
+Para explorar la aplicacion sin necesidad de crear una cuenta:
+
+| Campo | Valor |
+|---|---|
+| Correo electronico | juanperez@gmail.com |
+| Contrasena | Test123 |
+
+> Este usuario tiene un plan de seguro asignado y consultas previas registradas, por lo que es posible explorar todas las funciones: chat de triaje, historial, comparador e insights.
 
 ---
 
-## Estructura del proyecto
+## Funcionalidades
+
+### Chat de triaje con IA
+
+El usuario describe sus sintomas en lenguaje natural. La IA conduce una entrevista clinica estructurada:
+
+- **Turno 1:** pregunta sobre localizacion, tipo e intensidad del sintoma.
+- **Turno 2:** pregunta sobre tiempo de evolucion y si es continuo o intermitente.
+- **Turno 3:** pregunta sobre sintomas acompanantes (fiebre, nauseas, mareo, etc.).
+- **Turnos 4 a 6:** profundiza en antecedentes o factores de riesgo si la confianza no supera el 75%.
+- **Diagnostico:** emite la especialidad sugerida, nivel de urgencia, confianza del analisis y razon clinica.
+
+Al recibir el diagnostico, el sistema calcula y muestra:
+
+- El precio de referencia de la consulta para esa especialidad.
+- El porcentaje que cubre el plan de seguro del usuario.
+- El monto exacto que cubre la aseguradora.
+- El copago final que paga el paciente.
+- La lista de hospitales disponibles en la red de la aseguradora, ordenados de menor a mayor copago.
+- Alertas si la cobertura es inferior al 60%, si la especialidad no esta cubierta, o si el usuario no tiene seguro y el nivel de urgencia es alto.
+
+El resultado puede exportarse como PDF con todos los datos del analisis, el desglose del copago y la lista de hospitales.
+
+### Deteccion de emergencias
+
+Si en cualquier turno el usuario describe sintomas criticos (dolor toracico opresivo, dificultad respiratoria severa, perdida de conciencia, sangrado abundante, deficit neurologico agudo), la IA interrumpe la entrevista, muestra un modal de alerta y proporciona un enlace directo para llamar al ECU 911.
+
+### Historial de consultas
+
+El usuario puede revisar todas sus consultas anteriores: fecha, sintomas descritos, especialidad sugerida, nivel de urgencia y copago estimado.
+
+### Comparador de planes
+
+Permite seleccionar cualquiera de las 17 especialidades medicas soportadas y ver, en una tabla, todos los planes de todas las aseguradoras disponibles con su cobertura porcentual, copago estimado y copago fijo. Se resalta el plan con mejor precio y el plan que el usuario tiene actualmente activo.
+
+### Insights personalizados
+
+Analisis automatico basado en el historial de consultas del usuario:
+
+- Total de consultas realizadas y total acumulado en copagos.
+- Resumen desglosado por mes con especialidades atendidas.
+- Si el usuario **tiene seguro:** comparativa historica contra otros planes disponibles, indicando cuanto hubiera ahorrado o gastado de mas con cada alternativa.
+- Si el usuario **no tiene seguro:** recomendacion de los tres planes que mejor cubren sus especialidades mas frecuentes, con un score de cobertura calculado a partir de su propio historial.
+
+### Perfil y plan de seguro
+
+El usuario puede consultar sus datos y cambiar su plan de seguro en cualquier momento. La seleccion es por aseguradora primero y luego por plan especifico dentro de esa aseguradora. El cambio se refleja inmediatamente en el calculo de copagos del chat.
+
+### Panel de administracion
+
+Accesible unicamente para usuarios con rol de administrador. Permite gestionar el catalogo completo:
+
+- Aseguradoras: crear, editar, activar o desactivar.
+- Planes de seguro: crear, editar, asociar a aseguradora.
+- Coberturas por especialidad: configurar porcentaje de cobertura y copago fijo para cada especialidad dentro de un plan.
+- Hospitales: registrar nombre, ciudad, especialidades atendidas y precio de consulta.
+
+---
+
+## Arquitectura del sistema
+
+```
+[Navegador / React Frontend]
+          |
+          |  HTTPS · JWT Bearer (Supabase Auth)
+          v
+  [FastAPI Backend · Python]  <----  Groq API (Llama 3.3 70B)
+          |
+          |  service_role key (bypasea RLS)
+          v
+  [Supabase · PostgreSQL]
+```
+
+**Principio de diseno:**
+
+- El **frontend** nunca hace consultas de datos directamente a Supabase. Solo usa `supabase.auth.*` para manejar la sesion en localStorage.
+- Toda la logica de negocio vive en el **backend**, que valida el JWT en cada peticion y ejecuta las queries con la clave `service_role`.
+- El **backend** es el unico que conoce `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_JWT_SECRET`. Estas claves nunca llegan al navegador.
+
+---
+
+## Stack tecnologico
+
+| Capa | Tecnologia | Version |
+|---|---|---|
+| Frontend | React | 19.2 |
+| Build tool | Vite | 8.0 |
+| Routing | React Router | 7.15 |
+| Iconos | Lucide React | 1.16 |
+| Exportacion PDF | jsPDF | 4.2 |
+| Auth cliente | Supabase JS | 2.106 |
+| Backend | FastAPI | 0.136 |
+| Runtime | Python | 3.13 |
+| Servidor ASGI | Uvicorn | 0.47 |
+| Modelo IA | Groq — Llama 3.3 70B Versatile | — |
+| Base de datos | Supabase (PostgreSQL) | — |
+| Validacion JWT | PyJWT | 2.13 |
+| Rate limiting | slowapi | 0.1.9 |
+| Configuracion | pydantic-settings | 2.9 |
+| HTTP cliente | httpx | 0.28 |
+
+---
+
+## Estructura del repositorio
 
 ```
 FULLJACO_HACKIATHON/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                  # FastAPI app, CORS, routers, exception handlers
-│   │   ├── config.py                # Settings con pydantic-settings + lru_cache
-│   │   ├── dependencies.py          # get_current_user, require_admin (JWT + TTL cache)
-│   │   ├── exceptions.py            # SaludIAException y subclases
-│   │   ├── rate_limiter.py          # slowapi Limiter
-│   │   ├── controllers/
-│   │   │   ├── analizar_controller.py   # POST /analizar, GET /analizar/precios
-│   │   │   ├── perfil_controller.py     # GET/PUT /perfil
-│   │   │   ├── consulta_controller.py   # GET/POST /consultas, GET /consultas/recientes
-│   │   │   ├── plan_controller.py       # GET /aseguradoras, /planes, /comparador
-│   │   │   ├── insights_controller.py   # GET /insights
-│   │   │   └── admin_controller.py      # CRUD /admin/*
-│   │   ├── services/
-│   │   │   ├── ia_service.py            # Groq API, triaje 3 turnos, JSON parsing
-│   │   │   ├── copago_service.py        # calcular_copago() — fuente única de verdad
-│   │   │   ├── comparador_service.py    # Comparativa de planes por especialidad
-│   │   │   └── insights_service.py      # Resumen mensual, recomendaciones, N+1 free
-│   │   ├── repositories/
-│   │   │   ├── supabase_client.py       # Cliente Supabase con service_role + lru_cache
-│   │   │   ├── perfil_repository.py     # perfiles + plan + aseguradora + coberturas
-│   │   │   ├── consulta_repository.py   # consultas — create, get_by_user, get_last_n
-│   │   │   ├── plan_repository.py       # CRUD planes, coberturas, get_coberturas_bulk
-│   │   │   ├── aseguradora_repository.py# CRUD aseguradoras + cascade delete
-│   │   │   └── hospital_repository.py   # hospitales + precios_especialidad
-│   │   ├── dtos/
-│   │   │   ├── analizar_dto.py
-│   │   │   ├── consulta_dto.py
-│   │   │   ├── perfil_dto.py
-│   │   │   ├── plan_dto.py
-│   │   │   └── admin_dto.py
-│   │   ├── prompts/
-│   │   │   └── system_prompt.txt        # Prompt completo: triaje 3 turnos, emergencias,
-│   │   │                                # mapeo síntomas→especialidades, multiidioma
-│   │   └── utils/
-│   │       └── helpers.py               # formatear_dinero, limpiar_texto, filtrar_nulos
-│   ├── requirements.txt
-│   └── .env                             # ← NO commitear
-│
-└── frontend/
-    ├── src/
-    │   ├── api/
-    │   │   ├── client.js                # fetch wrapper — JWT auto-injection, ApiError
-    │   │   ├── analizar.api.js          # analizarSintomas, getPreciosPorEspecialidad
-    │   │   ├── consultas.api.js         # getConsultas, getConsultasRecientes, guardarConsulta
-    │   │   ├── perfil.api.js            # getPerfil, actualizarPerfil
-    │   │   ├── planes.api.js            # getAseguradoras, getPlanes, compararPlanes
-    │   │   ├── insights.api.js          # getInsights
-    │   │   └── admin.api.js             # adminAseguradoras/Planes/Coberturas/Hospitales
-    │   ├── constants/
-    │   │   └── especialidades.js        # Lista canónica de 17 especialidades
-    │   ├── context/
-    │   │   └── AuthContext.jsx          # user, perfil, loading, recargarPerfil
-    │   ├── components/
-    │   │   ├── ErrorBoundary.jsx
-    │   │   ├── Navbar.jsx
-    │   │   ├── ProtectedRoute.jsx
-    │   │   ├── AdminRoute.jsx           # Usa perfil.es_admin — sin hardcode de emails
-    │   │   └── SplashScreen.jsx
-    │   ├── pages/
-    │   │   ├── Chat.jsx                 # Triaje IA + copago + PDF export
-    │   │   ├── Historial.jsx            # Dashboard de consultas pasadas
-    │   │   ├── Comparador.jsx           # Comparativa de planes por especialidad
-    │   │   ├── Insights.jsx             # Análisis mensual + recomendaciones de plan
-    │   │   ├── Perfil.jsx               # Datos personales + cambio de plan
-    │   │   ├── Admin.jsx                # Panel CRUD (solo admin)
-    │   │   ├── Landing.jsx
-    │   │   ├── Login.jsx
-    │   │   ├── Registro.jsx
-    │   │   └── ResetPassword.jsx
-    │   ├── lib/
-    │   │   └── supabase.js              # Cliente Supabase anon — SOLO para auth
-    │   └── App.jsx
-    ├── package.json
-    └── .env                             # ← NO commitear
+|
++-- backend/
+|   +-- app/
+|   |   +-- main.py                    # FastAPI app, CORS, routers, handlers de excepcion
+|   |   +-- config.py                  # Settings via pydantic-settings con lru_cache
+|   |   +-- dependencies.py            # get_current_user, require_admin, cache JWT/JWKS
+|   |   +-- exceptions.py              # SaludIAException y subclases tipadas
+|   |   +-- rate_limiter.py            # slowapi Limiter global
+|   |   |
+|   |   +-- controllers/
+|   |   |   +-- auth_controller.py     # POST /auth/login, /register, /reset-password, /refresh
+|   |   |   +-- analizar_controller.py # POST /analizar  GET /analizar/precios
+|   |   |   +-- perfil_controller.py   # GET /perfil  PUT /perfil
+|   |   |   +-- consulta_controller.py # GET /consultas  POST /consultas  GET /consultas/recientes
+|   |   |   +-- plan_controller.py     # GET /aseguradoras  /planes  /comparador
+|   |   |   +-- insights_controller.py # GET /insights
+|   |   |   +-- admin_controller.py    # CRUD /admin/*  (requiere es_admin=true)
+|   |   |
+|   |   +-- services/
+|   |   |   +-- ia_service.py          # Groq API, construccion de prompt, parsing JSON
+|   |   |   +-- copago_service.py      # calcular_copago() — unica fuente de verdad
+|   |   |   +-- comparador_service.py  # comparativa de planes por especialidad
+|   |   |   +-- insights_service.py    # resumen mensual, comparativa, recomendaciones
+|   |   |
+|   |   +-- repositories/
+|   |   |   +-- supabase_client.py     # cliente Supabase con service_role
+|   |   |   +-- perfil_repository.py   # perfiles + plan + aseguradora + coberturas
+|   |   |   +-- consulta_repository.py # consultas — create, get_by_user, get_last_n
+|   |   |   +-- plan_repository.py     # planes, coberturas, get_coberturas_bulk (evita N+1)
+|   |   |   +-- aseguradora_repository.py
+|   |   |   +-- hospital_repository.py # hospitales + filtro por especialidad/aseguradora
+|   |   |
+|   |   +-- dtos/                      # Modelos Pydantic de entrada y salida
+|   |   +-- prompts/
+|   |   |   +-- system_prompt.txt      # Prompt del triaje: reglas, formato JSON, emergencias
+|   |   +-- utils/
+|   |       +-- helpers.py
+|   |
+|   +-- requirements.txt
+|   +-- runtime.txt                    # python-3.13.0 (para Render)
+|   +-- .env.example                   # Plantilla de variables — copiar a .env
+|
++-- frontend/
+|   +-- src/
+|   |   +-- api/
+|   |   |   +-- client.js              # fetch wrapper con inyeccion de JWT y refresco automatico
+|   |   |   +-- analizar.api.js
+|   |   |   +-- consultas.api.js
+|   |   |   +-- perfil.api.js
+|   |   |   +-- planes.api.js
+|   |   |   +-- insights.api.js
+|   |   |   +-- admin.api.js
+|   |   |
+|   |   +-- context/
+|   |   |   +-- AuthContext.jsx        # user, perfil, loading, iniciarSesion, cerrarSesion
+|   |   |
+|   |   +-- components/
+|   |   |   +-- Navbar.jsx
+|   |   |   +-- ProtectedRoute.jsx     # Redirige a /login si no hay sesion
+|   |   |   +-- AdminRoute.jsx         # Redirige si perfil.es_admin !== true
+|   |   |   +-- SplashScreen.jsx
+|   |   |   +-- ErrorBoundary.jsx
+|   |   |
+|   |   +-- pages/
+|   |   |   +-- Landing.jsx
+|   |   |   +-- Login.jsx
+|   |   |   +-- Registro.jsx
+|   |   |   +-- ResetPassword.jsx
+|   |   |   +-- Chat.jsx               # Triaje IA, copago, alertas, exportar PDF
+|   |   |   +-- Historial.jsx
+|   |   |   +-- Comparador.jsx
+|   |   |   +-- Insights.jsx
+|   |   |   +-- Perfil.jsx
+|   |   |   +-- Admin.jsx
+|   |   |
+|   |   +-- lib/
+|   |   |   +-- supabase.js            # Cliente Supabase anon — solo para supabase.auth.*
+|   |   |
+|   |   +-- constants/
+|   |       +-- especialidades.js      # Lista canonica de 17 especialidades
+|   |
+|   +-- package.json
+|   +-- package-lock.json
+|   +-- vercel.json                    # Rewrite de rutas para React Router SPA
+|   +-- .env.example                   # Plantilla de variables — copiar a .env
+|
++-- render.yaml                        # Configuracion de deployment en Render
++-- .gitignore
++-- README.md
 ```
 
 ---
 
 ## Variables de entorno
 
-### `backend/.env`
+### Backend — `backend/.env`
+
+Copiar `backend/.env.example` a `backend/.env` y completar los valores:
 
 ```env
+# Groq API — obtener en https://console.groq.com/keys
 GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
 
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...    # service_role — NUNCA al frontend
-SUPABASE_JWT_SECRET=tu-jwt-secret   # Project Settings → API → JWT Secret
+# Supabase — obtener en https://supabase.com/dashboard/project/<ref>/settings/api
+SUPABASE_URL=https://<ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...      # service_role — NUNCA exponer al frontend
+SUPABASE_JWT_SECRET=...               # Settings > API > JWT Settings > Legacy JWT Secret
 
-ALLOWED_ORIGINS=["http://localhost:5173","https://tu-dominio.com"]
-ENVIRONMENT=development              # production desactiva /docs y /redoc
+# CORS — orígenes permitidos (separados por coma si son varios)
+ALLOWED_ORIGINS=["http://localhost:5173"]
 
-# Valores por defecto para cálculos
+# Entorno: development activa /docs y /redoc. production los desactiva.
+ENVIRONMENT=development
+
+# Valores por defecto para calculos medicos
 DEFAULT_COVERAGE_PCT=70.0
 FALLBACK_PRICE=50.0
 ```
 
-### `frontend/.env`
+### Frontend — `frontend/.env`
+
+Copiar `frontend/.env.example` a `frontend/.env` y completar los valores:
 
 ```env
+# URL del backend FastAPI
 VITE_BACKEND_URL=http://localhost:8000
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...       # anon key — solo para supabase.auth.*
+
+# Supabase — mismos valores que en el backend
+VITE_SUPABASE_URL=https://<ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...         # anon key — es publica, seguro en el frontend
 ```
 
 ---
 
-## Instalación y ejecución
+## Instalacion y ejecucion local
+
+### Requisitos previos
+
+- Python 3.13 o superior
+- Node.js 18 o superior y npm
+- Una cuenta de Supabase con el proyecto y las tablas creadas
+- Una clave de API de Groq
 
 ### Backend
 
 ```bash
+# 1. Entrar a la carpeta del backend
 cd backend
+
+# 2. Crear el entorno virtual
 python -m venv venv
-# Windows:
+
+# 3. Activar el entorno virtual
+# En Windows:
 venv\Scripts\activate
-# Mac/Linux:
+# En Mac / Linux:
 source venv/bin/activate
 
+# 4. Instalar dependencias
 pip install -r requirements.txt
-cp .env.example .env   # completar las variables
 
+# 5. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con los valores reales
+
+# 6. Iniciar el servidor
 uvicorn app.main:app --reload --port 8000
 ```
 
-Documentación interactiva (solo en `ENVIRONMENT=development`):
-- Swagger: http://localhost:8000/docs
+El servidor queda disponible en `http://localhost:8000`.
+
+Con `ENVIRONMENT=development` se habilitan:
+- Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - Health check: http://localhost:8000/health
 
 ### Frontend
 
 ```bash
+# 1. Entrar a la carpeta del frontend
 cd frontend
-npm install
-cp .env.example .env   # completar las variables
 
-npm run dev            # http://localhost:5173
-npm run build          # build de producción
+# 2. Instalar dependencias
+npm install
+
+# 3. Configurar variables de entorno
+cp .env.example .env
+# Editar .env — en VITE_BACKEND_URL poner http://localhost:8000
+
+# 4. Iniciar el servidor de desarrollo
+npm run dev
+```
+
+La aplicacion queda disponible en `http://localhost:5173`.
+
+Para generar el build de produccion:
+
+```bash
+npm run build
+# Los archivos estaticos quedan en frontend/dist/
 ```
 
 ---
 
 ## Endpoints de la API
 
-| Método | Ruta | Auth | Descripción |
-|---|---|---|---|
-| `POST` | `/analizar` | JWT | Triaje IA — síntomas → especialidad + copago |
-| `GET` | `/analizar/precios` | JWT | Precios promedio por especialidad |
-| `GET` | `/perfil` | JWT | Perfil completo con plan y coberturas |
-| `PUT` | `/perfil` | JWT | Actualizar nombre y/o plan |
-| `GET` | `/consultas` | JWT | Historial de consultas del usuario |
-| `POST` | `/consultas` | JWT | Guardar resultado de consulta |
-| `GET` | `/consultas/recientes` | JWT | Últimas 3 consultas (contexto en chat) |
-| `GET` | `/aseguradoras` | JWT | Lista de aseguradoras activas |
-| `GET` | `/planes` | JWT | Lista de planes, filtrable por aseguradora |
-| `GET` | `/comparador` | JWT | Comparativa de planes para una especialidad |
-| `GET` | `/insights` | JWT | Análisis mensual + recomendaciones de plan |
-| `GET/POST/PUT/DELETE` | `/admin/*` | JWT + Admin | CRUD de aseguradoras, planes, coberturas, hospitales |
-| `GET` | `/health` | — | Estado del servicio |
+Todos los endpoints (excepto `/health` y `/auth/*`) requieren el header:
+
+```
+Authorization: Bearer <access_token>
+```
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| `POST` | `/auth/login` | Iniciar sesion — devuelve access_token y refresh_token |
+| `POST` | `/auth/register` | Registrar nuevo usuario en Supabase Auth |
+| `POST` | `/auth/reset-password` | Enviar correo de recuperacion de contrasena |
+| `POST` | `/auth/refresh` | Renovar el access_token usando el refresh_token |
+| `POST` | `/analizar` | Triaje IA — sintomas → especialidad + copago + hospitales |
+| `GET` | `/analizar/precios` | Precios promedio por especialidad |
+| `GET` | `/perfil` | Perfil completo del usuario con plan y coberturas |
+| `PUT` | `/perfil` | Actualizar nombre o plan de seguro |
+| `GET` | `/consultas` | Historial completo de consultas del usuario |
+| `POST` | `/consultas` | Guardar resultado de una consulta |
+| `GET` | `/consultas/recientes` | Ultimas 3 consultas (contexto para el chat) |
+| `GET` | `/aseguradoras` | Lista de aseguradoras activas |
+| `GET` | `/planes` | Planes de una aseguradora (filtro por `aseguradora_id`) |
+| `GET` | `/comparador` | Copago estimado de todos los planes para una especialidad |
+| `GET` | `/insights` | Analisis mensual, comparativa y recomendaciones de plan |
+| `GET/POST/PUT/DELETE` | `/admin/aseguradoras` | CRUD de aseguradoras (solo admin) |
+| `GET/POST/PUT/DELETE` | `/admin/planes` | CRUD de planes (solo admin) |
+| `GET/POST/PUT/DELETE` | `/admin/coberturas` | CRUD de coberturas por especialidad (solo admin) |
+| `GET/POST/PUT/DELETE` | `/admin/hospitales` | CRUD de hospitales (solo admin) |
+| `GET` | `/health` | Estado del servicio — no requiere autenticacion |
 
 ---
 
 ## Tablas en Supabase
 
-| Tabla | Descripción |
-|---|---|
-| `perfiles` | Datos del usuario: `nombre_completo`, `plan_seguro_id`, `es_admin` |
-| `aseguradoras` | `nombre`, `descripcion`, `activa` |
-| `planes_seguro` | `nombre`, `aseguradora_id`, `prima_mensual`, `deducible_anual`, `activo` |
-| `coberturas_especialidad` | `plan_id`, `especialidad`, `porcentaje_cobertura`, `copago_fijo`, `cubierta` |
-| `hospitales` | `nombre`, `ciudad`, `especialidades` (JSONB array), `precio` |
-| `precios_especialidad` | `especialidad`, `precio`, `hospital_id` |
-| `consultas` | `usuario_id`, `sintomas`, `especialidad_sugerida`, `nivel_urgencia`, `copago_estimado`, `resumen` (JSONB) |
+| Tabla | Campos principales | Descripcion |
+|---|---|---|
+| `perfiles` | `id`, `nombre_completo`, `plan_seguro_id`, `es_admin` | Datos del usuario. `id` es el mismo UUID de Supabase Auth. |
+| `aseguradoras` | `id`, `nombre`, `descripcion`, `activa` | Catalogo de aseguradoras. |
+| `planes_seguro` | `id`, `nombre`, `aseguradora_id`, `prima_mensual`, `deducible_anual`, `activo` | Planes asociados a una aseguradora. |
+| `coberturas_especialidad` | `plan_id`, `especialidad`, `porcentaje_cobertura`, `copago_fijo`, `cubierta` | Cobertura de cada especialidad para un plan. |
+| `hospitales` | `id`, `nombre`, `ciudad`, `especialidades` (JSONB), `precio` | Red de hospitales disponibles. |
+| `precios_especialidad` | `especialidad`, `precio`, `hospital_id` | Precio de consulta por especialidad en cada hospital. |
+| `consultas` | `id`, `usuario_id`, `sintomas`, `especialidad_sugerida`, `nivel_urgencia`, `copago_estimado`, `resumen` (JSONB), `created_at` | Historial de consultas por usuario. |
 
-> **RLS:** Todas las tablas deben tener RLS habilitado. El backend usa `service_role` que bypasea RLS. El frontend no hace queries directas a Supabase.
-
----
-
-## Especialidades médicas soportadas
-
-`Medicina General` · `Neurología` · `Cardiología` · `Gastroenterología` · `Traumatología` · `Pediatría` · `Ginecología` · `Dermatología` · `Oncología` · `Oftalmología` · `Urología` · `Psiquiatría` · `Endocrinología` · `Reumatología` · `Otorrinolaringología` · `Neumología` · `Nefrología`
+**Seguridad:** Todas las tablas deben tener Row Level Security (RLS) habilitado en Supabase. El backend usa la clave `service_role` que bypasea RLS, por lo que opera con privilegios completos. El frontend nunca accede directamente a estas tablas.
 
 ---
 
-## Flujo de triaje (cómo funciona la IA)
+## Especialidades medicas soportadas
+
+El sistema reconoce 17 especialidades. La IA unicamente puede devolver una de estas opciones; cualquier valor fuera de la lista es normalizado a Medicina General automaticamente.
 
 ```
-Turno 1 → Paciente describe síntomas
-        ← IA hace UNA pregunta de precisión (JSON: tipo "pregunta")
-
-Turno 2 → Paciente responde
-        ← IA hace UNA pregunta final (JSON: tipo "pregunta")
-
-Turno 3 → Paciente responde
-        ← IA emite diagnóstico (JSON: tipo "diagnostico")
-           con especialidad + nivel_urgencia + confianza + razon
-
-En cualquier turno → Si hay señal de emergencia:
-        ← IA responde inmediatamente (JSON: tipo "emergencia")
-           con instrucciones para llamar al ECU 911
+Medicina General   Neurologia        Cardiologia
+Gastroenterologia  Traumatologia     Pediatria
+Ginecologia        Dermatologia      Oncologia
+Oftalmologia       Urologia          Psiquiatria
+Endocrinologia     Reumatologia      Otorrinolaringologia
+Neumologia         Nefrologia
 ```
+
+---
+
+## Flujo del triaje con IA
+
+```
+Usuario: "Me duele la cabeza desde ayer"
+      |
+      v
+Backend: construye historial + datos del perfil + prompt del sistema
+      |
+      v
+Groq (Llama 3.3 70B): analiza y responde en JSON estricto
+      |
+      +-- tipo: "pregunta"   --> el backend devuelve la pregunta al frontend
+      |                          el frontend la muestra como burbuja de chat
+      |
+      +-- tipo: "diagnostico" -> el backend calcula el copago y busca hospitales
+      |                          devuelve especialidad + copago + hospitales al frontend
+      |
+      +-- tipo: "emergencia" --> el backend registra la consulta y devuelve la alerta
+                                 el frontend muestra el modal de emergencia (ECU 911)
+
+Minimo de preguntas antes del diagnostico: 3 turnos
+Maximo de preguntas permitidas:            6 turnos
+Si la confianza supera el 85% antes del minimo, se puede adelantar el diagnostico.
+Si se alcanza el maximo, se fuerza el diagnostico inmediatamente.
+```
+
+---
+
+## Calculo del copago
+
+El calculo se realiza exclusivamente en `backend/app/services/copago_service.py`. No hay ninguna formula en el frontend.
+
+```
+precio_consulta     = precio del hospital segun la especialidad
+cobertura_pct       = porcentaje de cobertura del plan para esa especialidad
+monto_cubierto      = precio_consulta * (cobertura_pct / 100)
+copago_porcentual   = precio_consulta - monto_cubierto
+copago_fijo         = valor minimo configurado en el plan (puede ser 0)
+copago_final        = max(copago_porcentual, copago_fijo)
+```
+
+Si el usuario no tiene plan de seguro, `cobertura_pct` es 0 y el copago es igual al precio completo de la consulta.
 
 ---
 
 ## Seguridad
 
-- **JWT validation:** PyJWT con `SUPABASE_JWT_SECRET`, algoritmo HS256, audience `"authenticated"`.
-- **Admin TTL cache:** Verificación de rol admin con caché de 60 segundos — evita queries repetidas.
-- **Rate limiting:** 10 requests/minuto en `POST /analizar` por IP.
-- **CORS restringido:** Solo los orígenes declarados en `ALLOWED_ORIGINS`.
-- **service_role solo en backend:** Nunca expuesto al cliente.
-- **RLS en Supabase:** Habilitado en todas las tablas.
-- **`.env` en `.gitignore`:** Nunca commitear credenciales.
+| Mecanismo | Implementacion |
+|---|---|
+| Autenticacion | JWT de Supabase validado en cada request via PyJWT. Soporta ES256/RS256 (JWKS) y HS256 (legacy). |
+| Autorizacion admin | Campo `es_admin` en la tabla `perfiles`. Verificacion con cache TTL de 60 segundos. |
+| Rate limiting | 10 requests/minuto en `POST /analizar` por IP (slowapi). |
+| CORS | Solo los dominios declarados en `ALLOWED_ORIGINS` pueden hacer peticiones al backend. |
+| Secretos | `service_role` y `JWT_SECRET` solo existen en variables de entorno del backend. Nunca en el frontend ni en el repositorio. |
+| RLS | Row Level Security habilitado en Supabase para todas las tablas. |
+| `.gitignore` | Los archivos `.env` estan excluidos del control de versiones. |
+
+---
+
+## Deployment en produccion
+
+La aplicacion esta desplegada con las siguientes plataformas:
+
+| Componente | Plataforma | URL |
+|---|---|---|
+| Frontend | Vercel | https://saludia-six.vercel.app |
+| Backend | Render (Free tier) | https://fulljaco-hackiathon.onrender.com |
+| Base de datos | Supabase | Proyecto `nndvufsbdnnuaonkwetq` |
+
+El repositorio en GitHub tiene auto-deploy configurado: cualquier `push` a la rama `main` dispara un nuevo deployment en Render y Vercel automaticamente.
+
+**Nota sobre el Free Tier de Render:** El servicio se suspende tras 15 minutos de inactividad. La primera peticion despues de un periodo de inactividad puede tardar entre 20 y 40 segundos mientras el servidor se reactiva. Esta limitacion es propia del plan gratuito de Render y no afecta al comportamiento funcional de la aplicacion.
 
 ---
 
