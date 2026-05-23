@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.exceptions import register_exception_handlers
 from app.rate_limiter import limiter
+from app.controllers.auth_controller import router as auth_router
 from app.controllers.analizar_controller import router as analizar_router
 from app.controllers.perfil_controller import router as perfil_router
 from app.controllers.consulta_controller import router as consultas_router
@@ -35,6 +36,7 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(auth_router)
 app.include_router(analizar_router)
 app.include_router(perfil_router)
 app.include_router(consultas_router)

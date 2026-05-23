@@ -15,15 +15,20 @@ _hospital_repo = HospitalRepository()
 
 
 @router.get("/aseguradoras", response_model=list[AseguradoraResponse])
-def listar_aseguradoras(user_id: str = Depends(get_current_user_id)):
+def listar_aseguradoras():
+    """
+    Catálogo público de aseguradoras.
+    No requiere autenticación — se muestra en el formulario de Registro.
+    """
     return [AseguradoraResponse(**a) for a in _plan_repo.get_aseguradoras()]
 
 
 @router.get("/planes", response_model=list[PlanResponse])
-def listar_planes(
-    aseguradora_id: Optional[str] = Query(None),
-    user_id: str = Depends(get_current_user_id),
-):
+def listar_planes(aseguradora_id: Optional[str] = Query(None)):
+    """
+    Catálogo público de planes de seguro.
+    No requiere autenticación — se muestra en el formulario de Registro.
+    """
     planes = _plan_repo.get_planes(aseguradora_id)
     result = []
     for p in planes:

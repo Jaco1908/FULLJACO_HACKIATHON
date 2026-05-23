@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 import { Activity } from 'lucide-react'
+
+const BACKEND = import.meta.env.VITE_BACKEND_URL
 
 export default function Login() {
   const { iniciarSesion } = useAuth()
@@ -21,13 +22,19 @@ export default function Login() {
       await iniciarSesion(form.email, form.password)
       navigate('/chat')
     } catch (err) {
-      const msg = err?.message?.toLowerCase() || ''
-      if (msg.includes('email not confirmed')) {
+      // El backend ya devuelve mensajes traducidos al español.
+      // Solo mapeamos los mensajes en inglés que aún pudieran llegar del SDK.
+      const msg = err?.message || ''
+      const msgLow = msg.toLowerCase()
+      if (msgLow.includes('email not confirmed') || msgLow.includes('debes confirmar')) {
         setError('Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.')
-      } else if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+      } else if (msgLow.includes('invalid login credentials') || msgLow.includes('invalid credentials')) {
         setError('Correo o contraseña incorrectos')
-      } else if (msg.includes('sin respuesta') || msg.includes('servidor')) {
-        setError(err.message)
+      } else if (msgLow.includes('failed to fetch') || msgLow.includes('network') || msgLow.includes('load failed')) {
+        setError('No se puede conectar al servidor. ¿Está el backend corriendo en localhost:8000?')
+      } else if (msg) {
+        // Mostrar el mensaje del backend directamente (ya está en español)
+        setError(msg)
       } else {
         setError('Error al iniciar sesión. Intenta de nuevo.')
       }
@@ -39,12 +46,22 @@ export default function Login() {
   async function handleReset() {
     if (!form.email.trim()) { setError('Ingresa tu correo primero para recuperar la contraseña'); return }
     setResetLoading(true); setError('')
-    const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
-      redirectTo: `${window.location.origin}/reset-password`
-    })
-    setResetLoading(false)
-    if (error) setError(error.message)
-    else setResetSent(true)
+    try {
+      await fetch(`${BACKEND}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          redirect_to: `${window.location.origin}/reset-password`,
+        }),
+      })
+      // Supabase siempre devuelve OK aunque el email no exista (seguridad)
+      setResetSent(true)
+    } catch {
+      setError('Error al enviar el correo. Verifica tu conexión.')
+    } finally {
+      setResetLoading(false)
+    }
   }
 
   return (
