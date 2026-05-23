@@ -5,6 +5,27 @@
 
 ---
 
+## Indice
+
+1. [Descripcion del proyecto](#descripcion-del-proyecto)
+2. [Acceso rapido](#acceso-rapido)
+3. [Funcionalidades](#funcionalidades)
+4. [Arquitectura del sistema](#arquitectura-del-sistema)
+5. [Stack tecnologico](#stack-tecnologico)
+6. [Estructura del repositorio](#estructura-del-repositorio)
+7. [Ejecucion local — paso a paso](#ejecucion-local--paso-a-paso)
+8. [Variables de entorno](#variables-de-entorno)
+9. [Endpoints de la API](#endpoints-de-la-api)
+10. [Tablas en Supabase](#tablas-en-supabase)
+11. [Especialidades medicas soportadas](#especialidades-medicas-soportadas)
+12. [Flujo del triaje con IA](#flujo-del-triaje-con-ia)
+13. [Calculo del copago](#calculo-del-copago)
+14. [Seguridad](#seguridad)
+15. [Deployment en produccion](#deployment-en-produccion)
+16. [Equipo](#equipo)
+
+---
+
 ## Descripcion del proyecto
 
 SaludIA es una plataforma web de triaje medico asistido por inteligencia artificial. Su proposito principal es ayudar al paciente a entender, antes de ir al medico, tres cosas concretas:
@@ -239,11 +260,255 @@ FULLJACO_HACKIATHON/
 
 ---
 
+## Ejecucion local — paso a paso
+
+Esta seccion explica como levantar el proyecto completo en una maquina local desde cero.
+
+### Paso 1 — Requisitos previos
+
+Antes de comenzar, verificar que el sistema tiene instalado lo siguiente:
+
+**Python 3.13**
+Descargar desde https://www.python.org/downloads/
+Durante la instalacion en Windows, marcar la opcion "Add Python to PATH".
+Verificar la instalacion:
+```bash
+python --version
+# Debe mostrar: Python 3.13.x
+```
+
+**Node.js 18 o superior**
+Descargar desde https://nodejs.org/ (version LTS recomendada).
+Verificar la instalacion:
+```bash
+node --version
+# Debe mostrar: v18.x.x o superior
+
+npm --version
+# Debe mostrar: 9.x.x o superior
+```
+
+**Git**
+Descargar desde https://git-scm.com/downloads si no esta instalado.
+
+---
+
+### Paso 2 — Clonar el repositorio
+
+```bash
+git clone https://github.com/Jaco1908/FULLJACO_HACKIATHON.git
+cd FULLJACO_HACKIATHON
+```
+
+---
+
+### Paso 3 — Obtener las credenciales necesarias
+
+El proyecto requiere dos servicios externos. Hay que obtener las claves antes de configurar los archivos `.env`.
+
+**Clave de Groq (modelo de IA)**
+
+1. Ir a https://console.groq.com/keys
+2. Crear una cuenta gratuita o iniciar sesion
+3. Click en "Create API Key"
+4. Copiar la clave — empieza con `gsk_`
+
+**Credenciales de Supabase (base de datos y autenticacion)**
+
+1. Ir a https://supabase.com y acceder al proyecto existente o crear uno nuevo
+2. En el dashboard, ir a: Settings → API
+3. Copiar los siguientes valores:
+
+| Valor | Donde encontrarlo |
+|---|---|
+| `SUPABASE_URL` | Seccion "Project URL" |
+| `SUPABASE_ANON_KEY` | Seccion "Project API keys" → anon public |
+| `SUPABASE_SERVICE_ROLE_KEY` | Seccion "Project API keys" → service_role |
+| `SUPABASE_JWT_SECRET` | Settings → API → JWT Settings → JWT Secret |
+
+> La `service_role` key solo va en el backend. La `anon` key solo va en el frontend.
+
+---
+
+### Paso 4 — Configurar y levantar el backend
+
+Abrir una terminal en la raiz del proyecto.
+
+**4.1 — Entrar a la carpeta del backend**
+```bash
+cd backend
+```
+
+**4.2 — Crear el entorno virtual de Python**
+```bash
+python -m venv venv
+```
+
+**4.3 — Activar el entorno virtual**
+
+En Windows:
+```bash
+venv\Scripts\activate
+```
+
+En Mac o Linux:
+```bash
+source venv/bin/activate
+```
+
+Una vez activado, el prompt de la terminal muestra `(venv)` al inicio. Si no aparece, el entorno no se activo correctamente.
+
+**4.4 — Instalar las dependencias**
+```bash
+pip install -r requirements.txt
+```
+
+Este proceso descarga e instala los 67 paquetes listados en `requirements.txt`. Puede tardar entre 1 y 3 minutos dependiendo de la conexion.
+
+**4.5 — Crear el archivo de variables de entorno**
+
+En Windows:
+```bash
+copy .env.example .env
+```
+
+En Mac o Linux:
+```bash
+cp .env.example .env
+```
+
+Abrir el archivo `backend/.env` con cualquier editor de texto y completar los valores con las credenciales obtenidas en el Paso 3:
+
+```env
+GROQ_API_KEY=gsk_TU_CLAVE_DE_GROQ
+GROQ_MODEL=llama-3.3-70b-versatile
+
+SUPABASE_URL=https://TU_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+SUPABASE_JWT_SECRET=TU_JWT_SECRET
+
+ALLOWED_ORIGINS=["http://localhost:5173"]
+ENVIRONMENT=development
+
+DEFAULT_COVERAGE_PCT=70.0
+FALLBACK_PRICE=50.0
+```
+
+**4.6 — Iniciar el servidor**
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+Si el servidor inicio correctamente, la terminal muestra:
+```
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+Verificar que el backend responde abriendo en el navegador:
+```
+http://localhost:8000/health
+```
+
+Debe devolver: `{"status": "ok", "service": "SaludIA Backend"}`
+
+Con `ENVIRONMENT=development` tambien estan disponibles:
+- Swagger UI (documentacion interactiva): http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+**Dejar esta terminal abierta.** El backend debe estar corriendo mientras se usa la aplicacion.
+
+---
+
+### Paso 5 — Configurar y levantar el frontend
+
+Abrir **una segunda terminal** en la raiz del proyecto.
+
+**5.1 — Entrar a la carpeta del frontend**
+```bash
+cd frontend
+```
+
+**5.2 — Instalar las dependencias**
+```bash
+npm install
+```
+
+Descarga los paquetes de Node.js listados en `package.json`. Puede tardar entre 30 segundos y 2 minutos.
+
+**5.3 — Crear el archivo de variables de entorno**
+
+En Windows:
+```bash
+copy .env.example .env
+```
+
+En Mac o Linux:
+```bash
+cp .env.example .env
+```
+
+Abrir el archivo `frontend/.env` y completar los valores:
+
+```env
+VITE_BACKEND_URL=http://localhost:8000
+VITE_SUPABASE_URL=https://TU_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...LA_ANON_KEY...
+```
+
+> En `VITE_SUPABASE_ANON_KEY` va la clave `anon public`, no la `service_role`.
+
+**5.4 — Iniciar el servidor de desarrollo**
+```bash
+npm run dev
+```
+
+La terminal muestra:
+```
+  VITE v8.x.x  ready in xxx ms
+
+  Local:   http://localhost:5173/
+```
+
+Abrir el navegador en http://localhost:5173 para ver la aplicacion.
+
+---
+
+### Paso 6 — Verificar que todo funciona
+
+Con el backend corriendo en el puerto 8000 y el frontend en el puerto 5173:
+
+1. Abrir http://localhost:5173
+2. Iniciar sesion con el usuario de prueba: `juanperez@gmail.com` / `Test123`
+3. Ir al Chat y describir un sintoma
+4. La IA debe responder con una pregunta de seguimiento
+
+Si el login falla con un error de conexion, verificar que el backend esta corriendo y que `VITE_BACKEND_URL` en `frontend/.env` apunta a `http://localhost:8000`.
+
+---
+
+### Resolucion de problemas comunes
+
+**El backend no arranca — error "ModuleNotFoundError"**
+El entorno virtual no esta activado. Ejecutar `venv\Scripts\activate` (Windows) o `source venv/bin/activate` (Mac/Linux) y luego volver a correr `uvicorn`.
+
+**El backend no arranca — error "ValidationError" o "field required"**
+Falta alguna variable de entorno en `backend/.env`. Revisar que todas las claves del Paso 4.5 esten completas y sin espacios extra.
+
+**El frontend muestra "No se puede conectar al servidor"**
+Verificar que el backend esta corriendo en el puerto 8000. Si se cambio el puerto, actualizar `VITE_BACKEND_URL` en `frontend/.env` y reiniciar `npm run dev`.
+
+**El frontend muestra errores de CORS**
+Verificar que `ALLOWED_ORIGINS` en `backend/.env` incluye `http://localhost:5173`. Reiniciar el servidor de uvicorn despues de cualquier cambio en `.env`.
+
+**npm install falla con errores de permisos (Mac/Linux)**
+No usar `sudo npm install`. En su lugar, configurar los permisos de npm: https://docs.npmjs.com/resolving-eacces-permissions-errors-with-npm
+
+---
+
 ## Variables de entorno
 
 ### Backend — `backend/.env`
-
-Copiar `backend/.env.example` a `backend/.env` y completar los valores:
 
 ```env
 # Groq API — obtener en https://console.groq.com/keys
@@ -255,7 +520,7 @@ SUPABASE_URL=https://<ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...      # service_role — NUNCA exponer al frontend
 SUPABASE_JWT_SECRET=...               # Settings > API > JWT Settings > Legacy JWT Secret
 
-# CORS — orígenes permitidos (separados por coma si son varios)
+# CORS — origenes permitidos
 ALLOWED_ORIGINS=["http://localhost:5173"]
 
 # Entorno: development activa /docs y /redoc. production los desactiva.
@@ -268,85 +533,13 @@ FALLBACK_PRICE=50.0
 
 ### Frontend — `frontend/.env`
 
-Copiar `frontend/.env.example` a `frontend/.env` y completar los valores:
-
 ```env
 # URL del backend FastAPI
 VITE_BACKEND_URL=http://localhost:8000
 
-# Supabase — mismos valores que en el backend
+# Supabase
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...         # anon key — es publica, seguro en el frontend
-```
-
----
-
-## Instalacion y ejecucion local
-
-### Requisitos previos
-
-- Python 3.13 o superior
-- Node.js 18 o superior y npm
-- Una cuenta de Supabase con el proyecto y las tablas creadas
-- Una clave de API de Groq
-
-### Backend
-
-```bash
-# 1. Entrar a la carpeta del backend
-cd backend
-
-# 2. Crear el entorno virtual
-python -m venv venv
-
-# 3. Activar el entorno virtual
-# En Windows:
-venv\Scripts\activate
-# En Mac / Linux:
-source venv/bin/activate
-
-# 4. Instalar dependencias
-pip install -r requirements.txt
-
-# 5. Configurar variables de entorno
-cp .env.example .env
-# Editar .env con los valores reales
-
-# 6. Iniciar el servidor
-uvicorn app.main:app --reload --port 8000
-```
-
-El servidor queda disponible en `http://localhost:8000`.
-
-Con `ENVIRONMENT=development` se habilitan:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- Health check: http://localhost:8000/health
-
-### Frontend
-
-```bash
-# 1. Entrar a la carpeta del frontend
-cd frontend
-
-# 2. Instalar dependencias
-npm install
-
-# 3. Configurar variables de entorno
-cp .env.example .env
-# Editar .env — en VITE_BACKEND_URL poner http://localhost:8000
-
-# 4. Iniciar el servidor de desarrollo
-npm run dev
-```
-
-La aplicacion queda disponible en `http://localhost:5173`.
-
-Para generar el build de produccion:
-
-```bash
-npm run build
-# Los archivos estaticos quedan en frontend/dist/
 ```
 
 ---
